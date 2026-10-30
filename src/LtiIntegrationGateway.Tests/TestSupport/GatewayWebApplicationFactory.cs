@@ -14,12 +14,16 @@ namespace LtiIntegrationGateway.Tests.TestSupport;
 public sealed class GatewayWebApplicationFactory : WebApplicationFactory<Program>, IAsyncInitializer
 {
     private readonly bool _supplyConnectionString;
+    private readonly IReadOnlyDictionary<string, string?> _extraSettings;
     private readonly string? _connectionString;
     private readonly SqliteConnection? _keepAliveConnection;
 
-    private GatewayWebApplicationFactory(bool supplyConnectionString)
+    private GatewayWebApplicationFactory(
+        bool supplyConnectionString,
+        IReadOnlyDictionary<string, string?>? extraSettings = null)
     {
         _supplyConnectionString = supplyConnectionString;
+        _extraSettings = extraSettings ?? new Dictionary<string, string?>();
 
         if (!supplyConnectionString)
         {
@@ -33,7 +37,8 @@ public sealed class GatewayWebApplicationFactory : WebApplicationFactory<Program
 
     public InMemoryLoggerProvider Logging { get; } = new();
 
-    public static GatewayWebApplicationFactory WithStorage() => new(true);
+    public static GatewayWebApplicationFactory WithStorage(IReadOnlyDictionary<string, string?>? settings = null) =>
+        new(true, settings);
 
     public static GatewayWebApplicationFactory WithoutStorage() => new(false);
 
@@ -58,6 +63,11 @@ public sealed class GatewayWebApplicationFactory : WebApplicationFactory<Program
             if (_supplyConnectionString)
             {
                 settings["ConnectionStrings:Gateway"] = _connectionString;
+            }
+
+            foreach (var pair in _extraSettings)
+            {
+                settings[pair.Key] = pair.Value;
             }
 
             configuration.AddInMemoryCollection(settings);

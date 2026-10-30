@@ -1,12 +1,18 @@
+using System.Threading.RateLimiting;
 using LtiIntegrationGateway.Contracts.Messages.V1;
 using LtiIntegrationGateway.Features.Channels;
+using LtiIntegrationGateway.Features.Inbound;
 using LtiIntegrationGateway.Features.Outbound;
 using LtiIntegrationGateway.Features.ProductRoutes;
 using LtiIntegrationGateway.Infrastructure.Persistence;
 using LtiIntegrationGateway.Infrastructure.Rebus;
+using LtiIntegrationGateway.Infrastructure.Routing;
 using LtiIntegrationGateway.Infrastructure.Security;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Rebus.Handlers;
 
 const string MissingConnectionStringMessage =
@@ -54,6 +60,36 @@ builder.Services
 
 builder.Services.AddScoped<ExecuteHttpCallHandler>();
 
+builder.Services.Configure<InboundRateLimitOptions>(
+    builder.Configuration.GetSection(InboundRateLimitOptions.SectionName));
+
+builder.Services.AddSingleton<InboundRouteCatalog>();
+builder.Services.AddSingleton<InboundProbeHandler>();
+builder.Services.AddSingleton<InboundEndpointDataSource>();
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy(InboundRateLimit.PolicyName, httpContext =>
+    {
+        var limits = httpContext.RequestServices
+            .GetRequiredService<IOptions<InboundRateLimitOptions>>()
+            .Value;
+
+        var channel = httpContext.GetEndpoint()
+            ?.Metadata.GetMetadata<InboundChannelMetadata>()
+            ?.ChannelName ?? "unknown";
+
+        return RateLimitPartition.GetFixedWindowLimiter(channel, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = limits.PermitLimit,
+            Window = TimeSpan.FromSeconds(limits.WindowSeconds),
+            QueueLimit = 0,
+        });
+    });
+});
+
 var app = builder.Build();
 
 // Конфигурация окончательно собирается к этому моменту, поэтому проверка fail-fast
@@ -67,6 +103,13 @@ using (var migrationScope = app.Services.CreateScope())
 {
     migrationScope.ServiceProvider.GetRequiredService<GatewayDbContext>().Database.Migrate();
 }
+
+app.UseRateLimiter();
+
+// Проверено спайком: регистрация EndpointDataSource только в DI не подхватывается minimal hosting,
+// поэтому источник добавляется в набор источников маршрутизации приложения напрямую.
+var endpointRouteBuilder = (IEndpointRouteBuilder)app;
+endpointRouteBuilder.DataSources.Add(app.Services.GetRequiredService<InboundEndpointDataSource>());
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 
