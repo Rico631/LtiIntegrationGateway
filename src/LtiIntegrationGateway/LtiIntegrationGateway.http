@@ -1,6 +1,7 @@
-@LtiIntegrationGateway_HostAddress = http://localhost:5078
+@HostAddress = http://localhost:5078
 
-GET {{LtiIntegrationGateway_HostAddress}}/weatherforecast/
-Accept: application/json
+GET {{HostAddress}}/health/live
+Accept: text/plain
 
 ###
+

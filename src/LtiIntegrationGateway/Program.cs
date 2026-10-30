@@ -1,41 +1,38 @@
+using LtiIntegrationGateway.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.EntityFrameworkCore;
+
+const string MissingConnectionStringMessage =
+    "Строка подключения к хранилищу не настроена. " +
+    "Задайте ключ конфигурации 'ConnectionStrings:Gateway'.";
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+builder.Services.AddDbContext<GatewayDbContext>((services, options) =>
+{
+    var configuration = services.GetRequiredService<IConfiguration>();
+
+    var registeredConnectionString = configuration.GetConnectionString("Gateway")
+        ?? throw new InvalidOperationException(MissingConnectionStringMessage);
+
+    options.UseSqlite(registeredConnectionString);
+});
+
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+// Конфигурация окончательно собирается к этому моменту, поэтому проверка fail-fast
+// не зависит от порядка применения источников и переопределений в тестах.
+if (string.IsNullOrWhiteSpace(app.Configuration.GetConnectionString("Gateway")))
 {
-    app.MapOpenApi();
+    throw new InvalidOperationException(MissingConnectionStringMessage);
 }
 
-app.UseHttpsRedirection();
-
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 
 app.Run();
 
-internal record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
+public partial class Program { }
+
+
