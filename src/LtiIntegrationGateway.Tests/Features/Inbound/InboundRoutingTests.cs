@@ -191,7 +191,7 @@ public class InboundRoutingTests
     }
 
     [Test]
-    public async Task Method_mismatch_on_active_path_returns_method_not_allowed()
+    public async Task Method_mismatch_on_two_segment_path_is_answered_by_platform_pattern()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage();
         using var client = factory.CreateClient();
@@ -200,7 +200,21 @@ public class InboundRoutingTests
 
         var response = await client.PostAsync("/callbacks/orders", null);
 
-        // Путь существует, но метод не разрешён метаданными endpoint'а: ASP.NET Core отвечает 405.
+        // Платформенный шаблон gRPC-сервисов /{service}/{method} тоже совпадает с двумя сегментами и
+        // перехватывает запрос с недопустимым методом, поэтому ответ 404, а не 405.
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.NotFound);
+    }
+
+    [Test]
+    public async Task Method_mismatch_on_three_segment_path_returns_method_not_allowed()
+    {
+        using var factory = GatewayWebApplicationFactory.WithStorage();
+        using var client = factory.CreateClient();
+
+        CatalogOf(factory).Activate(Set("rev-1", ("bank-a", "GET", "/callbacks/orders/{id}")));
+
+        var response = await client.PostAsync("/callbacks/orders/42", null);
+
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.MethodNotAllowed);
     }
 }

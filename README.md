@@ -180,6 +180,48 @@ dotnet ef migrations add <Name> --project src/LtiIntegrationGateway --output-dir
 
 Управляющий API для каналов пока не реализован — срезы вызываются из кода и тестов.
 
+## Управляющий API
+
+Управляющие операции публикуются из Protobuf-контракта `lti.gateway.management.v1`
+(`Protos/v1/management_api.proto`): один сервис `ManagementService`, доступный как gRPC и как REST
+через JSON transcoding. Реализация — `Features/Management`, доменные правила остаются в срезах
+`Features/Channels`, `Features/ProductRoutes`, `Features/Contracts`.
+
+Аутентификация: заголовок `X-Management-Api-Key` (имя настраивается), значение — переменная
+окружения `Management__ApiKey`. Пустой ключ в конфигурации означает `503` для всего управляющего API;
+отсутствие или несовпадение ключа — `401` без деталей (для gRPC — `Unauthenticated`). Сравнение
+выполняется за постоянное время.
+
+Основные операции (полный перечень — в ADR §15.2):
+
+| REST | Назначение |
+| --- | --- |
+| `GET /v1/channels` | список каналов |
+| `POST /v1/channels` | создание канала с черновиком |
+| `PATCH /v1/channels/{name}/draft` | изменение черновика |
+| `POST /v1/channels/{name}/revisions/{n}/publish` | публикация ревизии |
+| `POST /v1/channels/{name}/revisions/{n}/activate` | активация ревизии |
+| `POST /v1/channels/{name}/rollback` | откат |
+| `PUT /v1/products/{id}/route` | маршрут продукта |
+| `POST /v1/channels/{name}/contracts` | загрузка OpenAPI-документа |
+| `POST /v1/channels/{name}/contracts/{v}/publish` | публикация версии контракта |
+| `POST /v1/channels/{name}/contracts/{v}/activate` | активация версии и регистрация маршрутов |
+| `GET /v1/channels/{name}/contracts/{v}/operations` | операции версии контракта |
+| `GET /v1/operations/{messageId}` | статус исходящей операции |
+
+Контракты: `Infrastructure/OpenApi` читает документ (`Microsoft.OpenApi` 3.11.0) и проверяет его
+fail-closed — принимается OpenAPI 3.0, Swagger 2.0 конвертируется (факт фиксируется в аудите),
+OpenAPI 3.1 отклоняется; запрещённые конструкции, внешние `$ref` и поля рядом с `$ref` дают отказ
+со списком проблем, неизвестный `format` — предупреждение. Активация версии регистрирует её маршруты
+в каталоге входящих маршрутов и снимает маршруты предыдущей версии.
+
+Аудит: каждая управляющая операция (включая отклонённые и чтение) пишется в
+`ManagementAuditEntries` с операцией, объектом и результатом; значения секретов не сохраняются.
+
+Не реализовано: настройки отдельной операции (`enabled`, очередь получателя, лимит частоты),
+состояние канала (`/v1/channels/{name}/health`), персональная идентичность администратора (JWT/IdP),
+проверки Content-Type и наличия схемы тела при публикации контракта — относятся к inbound-контуру.
+
 ## Структура
 
 ```text

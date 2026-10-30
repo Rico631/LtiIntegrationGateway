@@ -8,15 +8,25 @@
 
   <ItemGroup>
     <PackageReference Include="Google.Protobuf" Version="3.36.2" />
+    <PackageReference Include="Grpc.AspNetCore" Version="2.85.0" />
     <PackageReference Include="Grpc.Tools" Version="2.85.0" PrivateAssets="All" />
+    <PackageReference Include="Microsoft.AspNetCore.Grpc.JsonTranscoding" Version="10.0.14" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.14" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.14" PrivateAssets="All" />
+    <PackageReference Include="Microsoft.OpenApi" Version="3.11.0" />
     <PackageReference Include="Rebus" Version="8.9.5" />
     <PackageReference Include="Rebus.ServiceProvider" Version="10.7.2" />
   </ItemGroup>
 
   <ItemGroup>
     <Protobuf Include="Protos\v1\integration_messages.proto" GrpcServices="None" />
+    <Protobuf Include="Protos\v1\management_api.proto" ProtoRoot="Protos" GrpcServices="Both" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Вендорные googleapis-дескрипторы: нужны protoc для аннотаций transcoding, C#-код берётся
+         из Google.Api.CommonProtos, поэтому сами файлы не компилируются. -->
+    <None Include="Protos\google\api\*.proto" />
   </ItemGroup>
 
 </Project>

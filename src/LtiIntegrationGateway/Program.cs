@@ -1,9 +1,13 @@
 using System.Threading.RateLimiting;
 using LtiIntegrationGateway.Contracts.Messages.V1;
 using LtiIntegrationGateway.Features.Channels;
+using LtiIntegrationGateway.Features.Contracts;
 using LtiIntegrationGateway.Features.Inbound;
+using LtiIntegrationGateway.Features.Management;
 using LtiIntegrationGateway.Features.Outbound;
 using LtiIntegrationGateway.Features.ProductRoutes;
+using LtiIntegrationGateway.Infrastructure.Management;
+using LtiIntegrationGateway.Infrastructure.OpenApi;
 using LtiIntegrationGateway.Infrastructure.Persistence;
 using LtiIntegrationGateway.Infrastructure.Rebus;
 using LtiIntegrationGateway.Infrastructure.Routing;
@@ -66,6 +70,7 @@ builder.Services.Configure<InboundRateLimitOptions>(
 builder.Services.AddSingleton<InboundRouteCatalog>();
 builder.Services.AddSingleton<InboundProbeHandler>();
 builder.Services.AddSingleton<InboundEndpointDataSource>();
+builder.Services.AddSingleton<InboundRouteSetValidator>();
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -90,6 +95,19 @@ builder.Services.AddRateLimiter(options =>
     });
 });
 
+builder.Services.AddSingleton<IOpenApiDocumentReader, MicrosoftOpenApiDocumentReader>();
+builder.Services.AddScoped<ManagementAuditWriter>();
+builder.Services.AddScoped<UploadContractVersionHandler>();
+builder.Services.AddScoped<PublishContractVersionHandler>();
+builder.Services.AddScoped<ActivateContractVersionHandler>();
+builder.Services.AddScoped<ListContractOperationsHandler>();
+builder.Services.AddScoped<ManagementApiService>();
+
+builder.Services.Configure<ManagementApiKeyOptions>(
+    builder.Configuration.GetSection(ManagementApiKeyOptions.SectionName));
+
+builder.Services.AddGrpc().AddJsonTranscoding();
+
 var app = builder.Build();
 
 // Конфигурация окончательно собирается к этому моменту, поэтому проверка fail-fast
@@ -106,10 +124,14 @@ using (var migrationScope = app.Services.CreateScope())
 
 app.UseRateLimiter();
 
+app.UseMiddleware<ManagementApiKeyMiddleware>();
+
 // Проверено спайком: регистрация EndpointDataSource только в DI не подхватывается minimal hosting,
 // поэтому источник добавляется в набор источников маршрутизации приложения напрямую.
 var endpointRouteBuilder = (IEndpointRouteBuilder)app;
 endpointRouteBuilder.DataSources.Add(app.Services.GetRequiredService<InboundEndpointDataSource>());
+
+app.MapGrpcService<ManagementApiService>();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 

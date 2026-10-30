@@ -50,6 +50,12 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
 
     public DbSet<OutboundMessageLog> OutboundMessageLogs => Set<OutboundMessageLog>();
 
+    public DbSet<ContractVersion> ContractVersions => Set<ContractVersion>();
+
+    public DbSet<ContractOperation> ContractOperations => Set<ContractOperation>();
+
+    public DbSet<ManagementAuditEntry> ManagementAuditEntries => Set<ManagementAuditEntry>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Channel>(channel =>
@@ -179,6 +185,41 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
             log.Property(entity => entity.ErrorCode).HasMaxLength(64);
             log.Property(entity => entity.DeliveryStatus).HasConversion<string>().HasMaxLength(16);
             log.HasIndex(entity => new { entity.MessageId, entity.DeliveryStatus });
+        });
+
+        modelBuilder.Entity<ContractVersion>(version =>
+        {
+            version.HasKey(entity => entity.Id);
+            version.Property(entity => entity.SourceFormat).HasConversion<string>().HasMaxLength(16);
+            version.Property(entity => entity.Status).HasConversion<string>().HasMaxLength(16);
+            version.Property(entity => entity.Document).IsRequired();
+            version.HasIndex(entity => new { entity.ChannelId, entity.Version }).IsUnique();
+            version.HasIndex(entity => new { entity.ChannelId, entity.Status });
+
+            version
+                .HasMany(entity => entity.Operations)
+                .WithOne(operation => operation.ContractVersion)
+                .HasForeignKey(operation => operation.ContractVersionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ContractOperation>(operation =>
+        {
+            operation.HasKey(entity => entity.Id);
+            operation.Property(entity => entity.HttpMethod).HasMaxLength(16).IsRequired();
+            operation.Property(entity => entity.Template).HasMaxLength(2048).IsRequired();
+            operation.Property(entity => entity.OperationId).HasMaxLength(256);
+            operation.HasIndex(entity => new { entity.ContractVersionId, entity.HttpMethod, entity.Template }).IsUnique();
+        });
+
+        modelBuilder.Entity<ManagementAuditEntry>(audit =>
+        {
+            audit.HasKey(entity => entity.Id);
+            audit.Property(entity => entity.Operation).HasMaxLength(64).IsRequired();
+            audit.Property(entity => entity.Target).HasMaxLength(256).IsRequired();
+            audit.Property(entity => entity.Result).HasMaxLength(16).IsRequired();
+            audit.Property(entity => entity.Details).HasMaxLength(2048);
+            audit.HasIndex(entity => entity.Operation);
         });
     }
 

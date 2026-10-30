@@ -1,0 +1,505 @@
+// lti.gateway.management.v1 — управляющий API шлюза (ADR §5.1, §15).
+//
+// НАЗНАЧЕНИЕ
+//   Контракт описывает административные операции шлюза: управление каналами и их ревизиями,
+//   маршрутами продуктов, версиями OpenAPI-контрактов и чтение статуса исходящих операций.
+//
+// ДОСТУП
+//   Один и тот же сервис доступен двумя способами:
+//     * gRPC — по полному имени метода, например
+//       /lti.gateway.management.v1.ManagementService/ListChannels;
+//     * REST — через JSON transcoding по аннотациям google.api.http, указанным у каждого метода.
+//   Состав данных и правила ошибок в обоих доступах совпадают.
+//
+// АУТЕНТИФИКАЦИЯ
+//   Каждый метод требует ключ API в заголовке запроса. По умолчанию заголовок X-Management-Api-Key,
+//   имя настраивается конфигурацией Management:HeaderName. Отсутствие или неверное значение — отказ
+//   без деталей (REST 401, gRPC Unauthenticated). Если ключ не настроен на сервере, весь управляющий
+//   API отвечает 503 (gRPC Unavailable).
+//
+// ОШИБКИ
+//   * доменный отказ (валидация, конфликт, неизменяемость) — HTTP 200 / gRPC OK с полем
+//     succeeded = false и полным списком problems; активная конфигурация при отказе не меняется;
+//   * отсутствие объекта — gRPC NotFound (REST 404), тело проблем не содержит;
+//   * некорректный запрос (неразбираемое тело, неизвестный тип авторизации) — gRPC InvalidArgument
+//     либо problems с кодом поля;
+//   * отказ аутентификации — см. раздел АУТЕНТИФИКАЦИЯ.
+//   Поле problems содержит все найденные проблемы за один вызов, а не первую.
+//
+// СОВМЕСТИМОСТЬ
+//   Номера полей не переиспользуются; удалённое поле помечается reserved по номеру и имени;
+//   семантика поля не меняется без нового package (v2). Потребитель может генерировать типы из этого
+//   файла самостоятельно.
+//
+// СЕКРЕТЫ
+//   В сообщениях передаются только ссылки на секреты (config_key), не их значения. Значения
+//   секретов сервер не возвращает никогда.
+
+syntax = "proto3";
+
+package lti.gateway.management.v1;
+
+option csharp_namespace = "LtiIntegrationGateway.Contracts.Management.V1";
+
+import "google/api/annotations.proto";
+
+// Управляющий API шлюза.
+//
+// Все методы требуют ключ API в заголовке запроса (см. АУТЕНТИФИКАЦИЯ в шапке файла).
+// Доменные отказы возвращаются в поле problems ответа, отсутствие объекта — gRPC NotFound.
+service ManagementService {
+  // Возвращает все зарегистрированные каналы в порядке имени.
+  //
+  // Для каждого канала отдаются настройки активной ревизии (если она есть) и перечень всех ревизий
+  // с номерами и состояниями. Доменных отказов не бывает: пустой список — валидный результат.
+  // REST: GET /v1/channels
+  rpc ListChannels (ListChannelsRequest) returns (ListChannelsResponse) {
+    option (google.api.http) = { get: "/v1/channels" };
+  }
+
+  // Создаёт канал вместе с черновой ревизией с номером 1.
+  //
+  // Имя канала уникально. Отказ возвращается в problems, если имя занято, не заполнено или настройки
+  // ревизии не проходят проверки. Созданный канал не имеет активной ревизии до публикации и активации.
+  // REST: POST /v1/channels
+  rpc CreateChannel (CreateChannelRequest) returns (ChannelOperationResponse) {
+    option (google.api.http) = { post: "/v1/channels" body: "*" };
+  }
+
+  // Возвращает канал по имени вместе с активной ревизией и перечнем ревизий.
+  //
+  // Если канал не найден, возвращается gRPC NotFound (REST 404).
+  // REST: GET /v1/channels/{channel_name}
+  rpc GetChannel (GetChannelRequest) returns (GetChannelResponse) {
+    option (google.api.http) = { get: "/v1/channels/{channel_name}" };
+  }
+
+  // Изменяет настройки черновика канала.
+  //
+  // Ревизия с номером revision должна быть черновиком: опубликованная ревизия не изменяется, попытка
+  // возвращает отказ в problems. Если revision = 0, используется существующий черновик, а при его
+  // отсутствии создаётся новый черновик со следующим номером. Активная ревизия не затрагивается.
+  // REST: PATCH /v1/channels/{channel_name}/draft
+  rpc UpdateChannelDraft (UpdateChannelDraftRequest) returns (ChannelOperationResponse) {
+    option (google.api.http) = { patch: "/v1/channels/{channel_name}/draft" body: "*" };
+  }
+  // Публикует черновик как неизменяемую ревизию.
+  //
+  // Настройки проверяются полностью; при проблемах возвращается их полный список, а активная ревизия
+  // не меняется. Если revision = 0, публикуется текущий черновик.
+  // REST: POST /v1/channels/{channel_name}/revisions/{revision}/publish
+  rpc PublishChannelRevision (PublishChannelRevisionRequest) returns (ChannelOperationResponse) {
+    option (google.api.http) = { post: "/v1/channels/{channel_name}/revisions/{revision}/publish" };
+  }
+
+  // Делает опубликованную ревизию активной конфигурацией канала.
+  //
+  // Предыдущая активная ревизия переходит в состояние Superseded; одновременно активна только одна
+  // ревизия канала. Отказ возвращается в problems, если ревизия не опубликована или не найдена.
+  // REST: POST /v1/channels/{channel_name}/revisions/{revision}/activate
+  rpc ActivateChannelRevision (ActivateChannelRevisionRequest) returns (ChannelOperationResponse) {
+    option (google.api.http) = { post: "/v1/channels/{channel_name}/revisions/{revision}/activate" };
+  }
+
+  // Возвращает активность предыдущей опубликованной ревизии канала.
+  //
+  // Используется для отката неудачного изменения конфигурации. Если откатывать некуда, отказ
+  // возвращается в problems.
+  // REST: POST /v1/channels/{channel_name}/rollback
+  rpc RollbackChannelRevision (RollbackChannelRevisionRequest) returns (ChannelOperationResponse) {
+    option (google.api.http) = { post: "/v1/channels/{channel_name}/rollback" };
+  }
+
+  // Создаёт или полностью заменяет маршрут продукта.
+  //
+  // Маршрут определяет, к каким каналам продукт имеет доступ и в какие адреса очередей шлюз может
+  // доставлять результаты. Отказ возвращается в problems, если product_id не соответствует формату,
+  // списки пусты или содержат пустые значения.
+  // REST: PUT /v1/products/{product_id}/route
+  rpc RegisterProductRoute (RegisterProductRouteRequest) returns (OperationResponse) {
+    option (google.api.http) = { put: "/v1/products/{product_id}/route" body: "*" };
+  }
+
+  // Возвращает маршрут продукта.
+  //
+  // Если продукт не зарегистрирован, возвращается gRPC NotFound (REST 404).
+  // REST: GET /v1/products/{product_id}/route
+  rpc GetProductRoute (GetProductRouteRequest) returns (GetProductRouteResponse) {
+    option (google.api.http) = { get: "/v1/products/{product_id}/route" };
+  }
+  // Загружает OpenAPI-документ и создаёт черновик версии контракта канала.
+  //
+  // Поддерживается OpenAPI 3.0 (принимается как есть) и Swagger 2.0 (конвертируется в 3.0, факт
+  // конвертации фиксируется в аудите); OpenAPI 3.1 отклоняется. Проверка fail-closed: запрещённые
+  // конструкции, внешние ссылки и поля рядом с $ref дают отказ, неизвестный format — предупреждение.
+  // Исходный документ сохраняется без изменений. Проблемы возвращаются в problems, предупреждения —
+  // в warnings.
+  // REST: POST /v1/channels/{channel_name}/contracts
+  rpc UploadContract (UploadContractRequest) returns (ContractOperationResponse) {
+    option (google.api.http) = { post: "/v1/channels/{channel_name}/contracts" body: "*" };
+  }
+
+  // Публикует версию контракта и фиксирует её операции.
+  //
+  // Из документа извлекаются операции (HTTP-метод, шаблон пути, operationId). Публикация отклоняется
+  // при повторяющемся operationId и при конфликте «метод + шаблон» с активными маршрутами других
+  // каналов. Опубликованная версия неизменяема: повторная публикация возвращает отказ.
+  // REST: POST /v1/channels/{channel_name}/contracts/{version}/publish
+  rpc PublishContractVersion (PublishContractVersionRequest) returns (ContractOperationResponse) {
+    option (google.api.http) = { post: "/v1/channels/{channel_name}/contracts/{version}/publish" };
+  }
+
+  // Активирует опубликованную версию контракта.
+  //
+  // Маршруты версии регистрируются в каталоге входящих маршрутов и начинают обслуживаться без
+  // перезапуска приложения; маршруты предыдущей активной версии канала снимаются. Если активация
+  // отклонена, ранее активные маршруты продолжают работать.
+  // REST: POST /v1/channels/{channel_name}/contracts/{version}/activate
+  rpc ActivateContractVersion (ActivateContractVersionRequest) returns (ContractOperationResponse) {
+    option (google.api.http) = { post: "/v1/channels/{channel_name}/contracts/{version}/activate" };
+  }
+
+  // Возвращает операции версии контракта.
+  //
+  // Для каждой операции отдаются HTTP-метод, шаблон пути и operationId (пустая строка, если в
+  // документе он не задан). Если версия не найдена, возвращается gRPC NotFound.
+  // REST: GET /v1/channels/{channel_name}/contracts/{version}/operations
+  rpc ListContractOperations (ListContractOperationsRequest) returns (ListContractOperationsResponse) {
+    option (google.api.http) = { get: "/v1/channels/{channel_name}/contracts/{version}/operations" };
+  }
+
+  // Возвращает состояние исходящей операции по идентификатору сообщения.
+  //
+  // Отдаются состояние, исход, HTTP-статус, код ошибки, число попыток и адрес доставки результата.
+  // Если операция не найдена, возвращается gRPC NotFound (REST 404).
+  // REST: GET /v1/operations/{message_id}
+  rpc GetOutboundOperation (GetOutboundOperationRequest) returns (GetOutboundOperationResponse) {
+    option (google.api.http) = { get: "/v1/operations/{message_id}" };
+  }
+}
+
+// Проблема доменной проверки: код и безопасное описание без внутренних деталей конфигурации.
+// Возвращается в поле problems ответа; пустой список проблем означает успех операции.
+message OperationProblem {
+  // Код проблемы — префикс исходного сообщения проверки: channel, name, base_url, allowed_methods,
+  // allowed_paths, retry_policy, config_key, auth_type, settings, revision, version, path, method,
+  // template, schema, ref, format, operation_id, conflict, operation. Устойчивый признак для
+  // программной обработки; текст проблемы может уточняться без смены контракта.
+  string code = 1;
+
+  // Человекочитаемое описание проблемы без значений секретов и без имён внутренних сущностей.
+  string message = 2;
+}
+
+// Правило политики повторов исходящего вызова.
+// Политика канала — упорядоченный список правил: первое подходящее правило задаёт задержки.
+message RetryRule {
+  // Признак совпадения: http_status_in — ответ с одним из status_codes, transport_error —
+  // отсутствие ответа (таймаут, отказ соединения, ошибка TLS). Другие значения отклоняются.
+  string match = 1;
+
+  // HTTP-статусы для match = http_status_in, например 429, 503. Для transport_error не задаются.
+  repeated int32 status_codes = 2;
+
+  // Задержки перед повторами в миллисекундах: число повторов равно длине списка, значения положительные.
+  repeated int32 delays_ms = 3;
+}
+
+// Настройки канала, фиксируемые ревизией. Опубликованная ревизия неизменяема.
+message ChannelSettings {
+  // Базовый URL внешней системы: абсолютный адрес со схемой https, без учётных данных и без
+  // завершающего пути, например https://bank-a.example.
+  string base_url = 1;
+
+  // Тип авторизации: none, bearer, api_key, basic, client_certificate. client_certificate пока не
+  // поддерживается рантаймом: запросы с этим типом отклоняются кодом AUTH_TYPE_UNSUPPORTED.
+  string auth_type = 2;
+
+  // Ключ конфигурации, по которому рантайм берёт значение секрета (например Secrets:BankA:Token).
+  // Сам секрет в базе и в API не хранится и не возвращается.
+  string config_key = 3;
+
+  // Имя заголовка для auth_type = api_key. Пустое значение означает передачу ключа
+  // query-параметром api_key.
+  string header_name = 4;
+
+  // Имя пользователя для auth_type = basic; для остальных типов не используется.
+  string user_name = 5;
+
+  // Таймаут одной попытки вызова в миллисекундах, положительное значение.
+  int32 per_attempt_timeout_ms = 6;
+
+  // Общий предел длительности вызова со всеми повторами в миллисекундах; не меньше таймаута попытки.
+  int32 overall_cap_ms = 7;
+
+  // Политика повторов; требуется хотя бы одно правило.
+  repeated RetryRule retry_policy = 8;
+
+  // Разрешённые HTTP-методы в верхнем регистре: GET, POST, PUT, PATCH, DELETE. Хотя бы один.
+  repeated string allowed_methods = 9;
+
+  // Разрешённые шаблоны относительных путей, например /api/contracts/{id}. Хотя бы один.
+  repeated string allowed_paths = 10;
+}
+
+// Краткая информация о ревизии канала: номер и состояние.
+message ChannelRevisionInfo {
+  // Номер ревизии внутри канала, начиная с 1; возрастает при каждом новом черновике.
+  int32 number = 1;
+
+  // Состояние ревизии: Draft, Published, Active или Superseded. Активной может быть только одна
+  // ревизия канала.
+  string status = 2;
+}
+
+// Канал интеграции с активной конфигурацией и перечнем ревизий.
+message ChannelInfo {
+  // Идентификатор канала (Guid в строковом виде); используется во всех операциях над каналом.
+  string channel_id = 1;
+
+  // Уникальное имя канала в формате ^[a-z][a-z0-9-]{1,31}$, например bank-a.
+  string name = 2;
+
+  // Настройки активной ревизии. Поле отсутствует, если активной ревизии ещё нет: канал создан, но
+  // конфигурация не опубликована и не активирована.
+  ChannelSettings active_settings = 3;
+
+  // Все ревизии канала в порядке возрастания номера.
+  repeated ChannelRevisionInfo revisions = 4;
+}
+
+// Запрос списка каналов. Параметров не требует: список всегда возвращается полностью.
+message ListChannelsRequest {
+}
+
+// Ответ со списком каналов, упорядоченным по имени.
+message ListChannelsResponse {
+  // Каналы шлюза; пустой список означает, что каналы ещё не созданы.
+  repeated ChannelInfo channels = 1;
+}
+
+// Запрос создания канала вместе с черновой ревизией номер 1.
+message CreateChannelRequest {
+  // Уникальное имя создаваемого канала, формат ^[a-z][a-z0-9-]{1,31}$. Занятое имя — отказ.
+  string name = 1;
+
+  // Начальные настройки черновика; проверяются при публикации, но формат полей проверяется сразу.
+  ChannelSettings settings = 2;
+}
+
+// Запрос канала по имени.
+message GetChannelRequest {
+  // Имя существующего канала; отсутствие канала — gRPC NotFound.
+  string channel_name = 1;
+}
+
+// Ответ с данными одного канала.
+message GetChannelResponse {
+  // Канал с активными настройками и перечнем ревизий.
+  ChannelInfo channel = 1;
+}
+
+// Запрос изменения настроек черновика.
+message UpdateChannelDraftRequest {
+  // Имя канала, черновик которого изменяется.
+  string channel_name = 1;
+
+  // Номер изменяемого черновика. 0 означает: взять существующий черновик, а при его отсутствии
+  // создать новый со следующим номером. Опубликованная ревизия не изменяется.
+  int32 revision = 2;
+
+  // Полный набор настроек черновика: отсутствующие поля сбрасываются к значениям по умолчанию.
+  ChannelSettings settings = 3;
+}
+
+// Запрос публикации ревизии канала.
+message PublishChannelRevisionRequest {
+  // Имя канала, чей черновик публикуется.
+  string channel_name = 1;
+
+  // Номер публикуемого черновика; 0 означает текущий черновик. Опубликованная ревизия повторно
+  // не публикуется — операция вернёт отказ.
+  int32 revision = 2;
+}
+
+// Запрос активации опубликованной ревизии канала.
+message ActivateChannelRevisionRequest {
+  // Имя канала, чья ревизия активируется.
+  string channel_name = 1;
+
+  // Номер активируемой ревизии; ревизия должна быть опубликована.
+  int32 revision = 2;
+}
+
+// Запрос отката конфигурации канала на предыдущую опубликованную ревизию.
+message RollbackChannelRevisionRequest {
+  // Имя канала, конфигурация которого откатывается.
+  string channel_name = 1;
+}
+
+// Результат операции над каналом или ревизией.
+message ChannelOperationResponse {
+  // Признак успеха: true — операция выполнена, false — отказ, подробности в problems.
+  bool succeeded = 1;
+
+  // Полный список проблем проверки или конфликтов; пустой при succeeded = true.
+  repeated OperationProblem problems = 2;
+
+  // Идентификатор канала в строковом виде; заполняется, когда операция относится к конкретному каналу.
+  string channel_id = 3;
+
+  // Номер ревизии, затронутой операцией: черновика — при создании и изменении, опубликованной или
+  // активной — при публикации, активации и откате. 0 означает, что номер не определён.
+  int32 revision = 4;
+}
+
+// Результат операции без доменных данных.
+message OperationResponse {
+  // Признак успеха: true — операция выполнена, false — отказ, подробности в problems.
+  bool succeeded = 1;
+
+  // Полный список проблем проверки или конфликтов; пустой при succeeded = true.
+  repeated OperationProblem problems = 2;
+}
+
+// Запрос создания или замены маршрута продукта.
+message RegisterProductRouteRequest {
+  // Идентификатор продукта, формат ^[a-z][a-z0-9-]{1,31}$, например dpv.
+  string product_id = 1;
+
+  // Каналы, доступные продукту для исходящих вызовов. Требуется хотя бы один.
+  repeated string allowed_channels = 2;
+
+  // Адреса очередей, допустимые как отправитель запроса и получатель результата. Требуется хотя бы один.
+  repeated string allowed_queue_addresses = 3;
+}
+
+// Запрос маршрута продукта.
+message GetProductRouteRequest {
+  // Идентификатор зарегистрированного продукта; отсутствие — gRPC NotFound.
+  string product_id = 1;
+}
+
+// Ответ с маршрутом продукта.
+message GetProductRouteResponse {
+  // Идентификатор продукта.
+  string product_id = 1;
+
+  // Каналы, доступные продукту.
+  repeated string allowed_channels = 2;
+
+  // Адреса очередей, допустимые для продукта.
+  repeated string allowed_queue_addresses = 3;
+}
+
+// Запрос загрузки OpenAPI-документа как черновика версии контракта канала.
+message UploadContractRequest {
+  // Имя канала, которому принадлежит контракт.
+  string channel_name = 1;
+
+  // Исходный документ OpenAPI 3.0 или Swagger 2.0 в виде текста (JSON или YAML).
+  // Сохраняется без изменений; версия определяется по полям openapi или swagger.
+  string document = 2;
+}
+
+// Запрос публикации версии контракта.
+message PublishContractVersionRequest {
+  // Имя канала, которому принадлежит контракт.
+  string channel_name = 1;
+
+  // Номер публикуемой версии; версия должна быть черновиком.
+  int32 version = 2;
+}
+
+// Запрос активации опубликованной версии контракта.
+message ActivateContractVersionRequest {
+  // Имя канала, которому принадлежит контракт.
+  string channel_name = 1;
+
+  // Номер активируемой версии; версия должна быть опубликована.
+  int32 version = 2;
+}
+
+// Запрос операций версии контракта.
+message ListContractOperationsRequest {
+  // Имя канала, которому принадлежит контракт.
+  string channel_name = 1;
+
+  // Номер версии контракта; отсутствие версии — gRPC NotFound.
+  int32 version = 2;
+}
+
+// Операция версии контракта: метод, шаблон пути и идентификатор операции из документа.
+message ContractOperationInfo {
+  // HTTP-метод операции в верхнем регистре: GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD или TRACE.
+  string http_method = 1;
+
+  // Шаблон пути из документа, например /callbacks/contracts/{id}; на его основе регистрируется
+  // входящий маршрут при активации версии.
+  string template = 2;
+
+  // Идентификатор операции из документа; пустая строка, если operationId не задан.
+  string operation_id = 3;
+}
+
+// Ответ с операциями версии контракта, упорядоченными по методу и шаблону.
+message ListContractOperationsResponse {
+  // Операции версии контракта; пустой список допустим для документа без путей.
+  repeated ContractOperationInfo operations = 1;
+}
+
+// Результат операции над версией контракта.
+message ContractOperationResponse {
+  // Признак успеха: true — операция выполнена, false — отказ, подробности в problems.
+  bool succeeded = 1;
+
+  // Полный список проблем проверки документа, конфликтов и нарушений неизменяемости.
+  repeated OperationProblem problems = 2;
+
+  // Предупреждения, не препятствующие операции: например, неизвестный format в схеме.
+  repeated string warnings = 3;
+
+  // Номер версии контракта, созданной или затронутой операцией; 0, если номер не определён.
+  int32 version = 4;
+
+  // Формат исходного документа: OpenApi30 или Swagger20. Заполняется при загрузке документа.
+  string source_format = 5;
+}
+
+// Запрос состояния исходящей операции.
+message GetOutboundOperationRequest {
+  // Идентификатор операции из сообщения OutboundRequest; отсутствие — gRPC NotFound.
+  string message_id = 1;
+}
+
+// Состояние исходящей операции, зафиксированное шлюзом.
+message GetOutboundOperationResponse {
+  // Идентификатор операции из исходного сообщения.
+  string message_id = 1;
+
+  // Идентификатор продукта, отправившего запрос.
+  string product_id = 2;
+
+  // Имя канала, по конфигурации которого выполнялся вызов.
+  string channel_name = 3;
+
+  // Состояние операции: Accepted, InProgress или Completed.
+  string status = 4;
+
+  // Исход завершённой операции: HTTP_RESPONSE, TRANSPORT_ERROR или GATEWAY_REFUSED; пусто, пока
+  // операция не завершена.
+  string outcome = 5;
+
+  // HTTP-статус ответа внешней системы; 0, если ответ не получен или операция отклонена шлюзом.
+  int32 http_status_code = 6;
+
+  // Код отказа шлюза или транспортной ошибки, например PRODUCT_NOT_ALLOWED или TIMEOUT;
+  // пусто при успешном ответе внешней системы.
+  string error_code = 7;
+
+  // Количество выполненных попыток вызова, включая первую.
+  int32 attempt_count = 8;
+
+  // Адрес очереди, в которую доставляется результат; пусто, если адрес не определён.
+  string return_address = 9;
+}

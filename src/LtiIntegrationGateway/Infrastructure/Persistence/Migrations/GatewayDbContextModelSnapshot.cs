@@ -177,6 +177,117 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                     b.ToTable("ChannelRevisions");
                 });
 
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ContractOperation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ContractVersionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("HttpMethod")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OperationId")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Template")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContractVersionId", "HttpMethod", "Template")
+                        .IsUnique();
+
+                    b.ToTable("ContractOperations");
+                });
+
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ContractVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("ActivatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ChannelId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Document")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("PublishedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SourceFormat")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChannelId", "Status");
+
+                    b.HasIndex("ChannelId", "Version")
+                        .IsUnique();
+
+                    b.ToTable("ContractVersions");
+                });
+
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ManagementAuditEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Details")
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Operation")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Result")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Target")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Operation");
+
+                    b.ToTable("ManagementAuditEntries");
+                });
+
             modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.OutboundMessageLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -406,6 +517,28 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                     b.Navigation("Channel");
                 });
 
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ContractOperation", b =>
+                {
+                    b.HasOne("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ContractVersion", "ContractVersion")
+                        .WithMany("Operations")
+                        .HasForeignKey("ContractVersionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ContractVersion");
+                });
+
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ContractVersion", b =>
+                {
+                    b.HasOne("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channel", "Channel")
+                        .WithMany()
+                        .HasForeignKey("ChannelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Channel");
+                });
+
             modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRouteChannel", b =>
                 {
                     b.HasOne("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRoute", "ProductRoute")
@@ -438,6 +571,11 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                     b.Navigation("AllowedMethods");
 
                     b.Navigation("AllowedPaths");
+                });
+
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ContractVersion", b =>
+                {
+                    b.Navigation("Operations");
                 });
 
             modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRoute", b =>

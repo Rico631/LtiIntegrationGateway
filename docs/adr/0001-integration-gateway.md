@@ -1210,6 +1210,13 @@ OpenAPI JSON считается недоверенным входным доку
 заменить без переписывания обработчика. Схема собирается один раз на ревизию; при обработке
 запроса используется готовая схема активного снимка.
 
+**Использованная версия библиотеки (проверено в изменении `2026-10-29-management-grpc-api`).**
+Чтение выполняется пакетом `Microsoft.OpenApi` 3.11.0: `OpenApiDocument.LoadAsync(Stream)` возвращает
+`ReadResult` с `Document` и `Diagnostic`, версия источника (`OpenApi3_0` / `OpenApi2_0`) доступна в
+`Diagnostic.SpecificationVersion`, а ошибки и предупреждения разбора — в `Diagnostic.Errors` и
+`Diagnostic.Warnings`. Swagger 2.0 читается тем же вызовом, поэтому отдельный пакет-ридер не нужен;
+документ при этом нормализуется в объектную модель 3.0, а исходный текст сохраняется в базе.
+
 **Политика загрузки — fail-closed.** Публикация отклоняется, если документ содержит
 конструкции вне поддерживаемого перечня или запрещённые ссылки. Отказ возвращает полный
 список проблем за один проход (с путём до элемента), а не первую найденную.
@@ -1288,6 +1295,37 @@ OpenAPI JSON считается недоверенным входным доку
 
 Это логический перечень. Окончательные RPC-методы, имена сообщений и REST-маршруты
 фиксируются в Protobuf-контрактах.
+
+**Итоговый контракт (реализовано в `lti.gateway.management.v1`).** Единственный сервис
+`ManagementService`, REST-доступ — через JSON transcoding тех же методов:
+
+| RPC | REST | Назначение |
+|---|---|---|
+| `ListChannels` | `GET /v1/channels` | Список каналов с активными настройками и ревизиями |
+| `CreateChannel` | `POST /v1/channels` | Создание канала с черновой ревизией |
+| `GetChannel` | `GET /v1/channels/{channel_name}` | Канал по имени |
+| `UpdateChannelDraft` | `PATCH /v1/channels/{channel_name}/draft` | Изменение черновика |
+| `PublishChannelRevision` | `POST /v1/channels/{channel_name}/revisions/{revision}/publish` | Публикация ревизии |
+| `ActivateChannelRevision` | `POST /v1/channels/{channel_name}/revisions/{revision}/activate` | Активация ревизии |
+| `RollbackChannelRevision` | `POST /v1/channels/{channel_name}/rollback` | Откат на предыдущую ревизию |
+| `RegisterProductRoute` | `PUT /v1/products/{product_id}/route` | Разрешённые каналы и адреса очередей |
+| `GetProductRoute` | `GET /v1/products/{product_id}/route` | Чтение маршрута продукта |
+| `UploadContract` | `POST /v1/channels/{channel_name}/contracts` | Загрузка OpenAPI-документа как версии контракта |
+| `PublishContractVersion` | `POST /v1/channels/{channel_name}/contracts/{version}/publish` | Публикация версии с операциями |
+| `ActivateContractVersion` | `POST /v1/channels/{channel_name}/contracts/{version}/activate` | Активация версии и регистрация маршрутов |
+| `ListContractOperations` | `GET /v1/channels/{channel_name}/contracts/{version}/operations` | Операции версии контракта |
+| `GetOutboundOperation` | `GET /v1/operations/{message_id}` | Статус исходящей операции |
+
+Отличия от логического перечня выше: контракты адресуются по каналу
+(`/v1/channels/{channel_name}/contracts`), маршруты продуктов добавлены как отдельный ресурс,
+настройки отдельной операции (`PATCH .../operations/{operationId}`) и состояние канала
+(`GET /v1/channels/{name}/health`) отложены до inbound-контура.
+
+**Особенность хостинга gRPC.** Сервисы gRPC публикуются по платформенному шаблону
+`/{service}/{method}`. Если шаблон входящего маршрута состоит из двух сегментов, запрос с
+недопустимым для него методом перехватывается платформенным шаблоном и получает `404`, а не `405`;
+маршруты из трёх и более сегментов сохраняют `405`. Зафиксировано тестами
+`InboundRoutingTests`, учитывается при проектировании входящих шаблонов.
 
 ### 15.3. Версионирование конфигурации
 

@@ -72,7 +72,7 @@ public sealed class UpdateChannelDraftHandler(GatewayDbContext db)
             revision = existingDraft;
         }
 
-        ChannelRevisionWriter.Apply(revision, command.Configuration);
+        ChannelRevisionWriter.Apply(db, revision, command.Configuration);
         ChannelAuditWriter.Add(db, channel.Id, revision.Number, "update-channel-draft");
 
         await db.SaveChangesAsync(cancellationToken);
