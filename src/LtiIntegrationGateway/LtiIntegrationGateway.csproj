@@ -7,7 +7,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.36.2" />
+    <PackageReference Include="Grpc.Tools" Version="2.85.0" PrivateAssets="All" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.14" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.14" PrivateAssets="All" />
+    <PackageReference Include="Rebus" Version="8.9.5" />
+    <PackageReference Include="Rebus.ServiceProvider" Version="10.7.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="Protos\v1\integration_messages.proto" GrpcServices="None" />
   </ItemGroup>
 
 </Project>

@@ -235,6 +235,11 @@ ClientBin/
 *~
 *.dbmdl
 *.dbproj.schemaview
+
+# SQLite-файлы локальной разработки
+*.db
+*.db-shm
+*.db-wal
 *.jfm
 *.pfx
 *.publishsettings

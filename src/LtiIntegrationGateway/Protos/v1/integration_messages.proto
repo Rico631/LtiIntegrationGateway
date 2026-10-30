@@ -1,0 +1,156 @@
+// lti.gateway.messages.v1 — интеграционные сообщения между продуктами и шлюзом.
+//
+// ПРОФИЛЬ КОДИРОВАНИЯ (нормативный, обязателен для всех потребителей):
+//   * формат тела в Rebus — ProtoJSON (UTF-8);
+//   * имена полей на проводе — lowerCamelCase; парсер обязан принимать и snake_case;
+//   * bytes кодируются как base64; 64-битные целые — строкой; enum — именем значения;
+//   * поля с отсутствующим значением не печатаются, поэтому отсутствие поля значимо
+//     для полей, объявленных optional;
+//   * неизвестные поля игнорируются при разборе (IgnoreUnknownFields = true);
+//   * заголовок rbs2-msg-type содержит полное имя сообщения,
+//     например "lti.gateway.messages.v1.OutboundRequest";
+//   * заголовок rbs2-content-type содержит "application/json".
+//
+// ЗАПРЕТЫ:
+//   * google.protobuf.Any в интеграционных сообщениях не используется;
+//   * Struct и Value не используются для тел: тело передаётся как bytes.
+//
+// СОВМЕСТИМОСТЬ: номера полей не переиспользуются; удалённое поле помечается reserved
+// по номеру и имени; семантика поля не меняется без нового package (v2).
+
+syntax = "proto3";
+
+package lti.gateway.messages.v1;
+
+option csharp_namespace = "LtiIntegrationGateway.Contracts.Messages.V1";
+
+import "google/protobuf/timestamp.proto";
+
+// Пара запроса: имя и значение. Последовательность сохраняет порядок и повторы,
+// поэтому список намеренно не заменён на map<string, string>.
+message QueryParameter {
+  string name = 1;
+  string value = 2;
+}
+
+// Исход исходящего вызова.
+enum Outcome {
+  OUTCOME_UNSPECIFIED = 0;
+
+  // Внешняя система вернула HTTP-ответ: статус и тело передаются продукту.
+  HTTP_RESPONSE = 1;
+
+  // Ответ не получен: таймаут, отказ соединения, ошибка TLS или исчерпаны повторы.
+  TRANSPORT_ERROR = 2;
+
+  // Шлюз отказал до внешнего вызова: недопустимый путь, метод, канал или продукт.
+  GATEWAY_REFUSED = 3;
+}
+
+// Запрос продукта на исходящий HTTP-вызов.
+message OutboundRequest {
+  // Идентификатор операции; повторная отправка с тем же значением — та же операция.
+  string message_id = 1;
+
+  // Идентификатор продукта, формат ^[a-z][a-z0-9-]{1,31}$.
+  string product_id = 2;
+
+  // Имя зарегистрированного канала.
+  string channel_name = 3;
+
+  // Относительный путь внешнего API; обязан начинаться с "/".
+  string relative_path = 4;
+
+  // HTTP-метод в верхнем регистре.
+  string http_method = 5;
+
+  // Тип тела запроса; обязателен при непустом body.
+  optional string content_type = 6;
+
+  // Тело запроса в исходном виде; в ProtoJSON кодируется как base64.
+  bytes body = 7;
+
+  // Query-параметры с сохранением порядка и повторов.
+  repeated QueryParameter query_parameters = 8;
+
+  // Идентификатор бизнес-процесса.
+  optional string correlation_id = 9;
+
+  // Ключ идемпотентности; наличие разрешает повтор POST/PATCH.
+  optional string idempotency_key = 10;
+}
+
+// Результат исходящего вызова.
+message OutboundResult {
+  // Идентификатор исходного запроса.
+  string message_id = 1;
+
+  // Идентификатор продукта.
+  string product_id = 2;
+
+  // Имя канала.
+  string channel_name = 3;
+
+  // Тип результата: HTTP-ответ, транспортная ошибка или отказ шлюза.
+  Outcome outcome = 4;
+
+  // HTTP-статус, если ответ получен.
+  optional int32 http_status_code = 5;
+
+  // Content-Type ответа.
+  optional string content_type = 6;
+
+  // Тело ответа в исходном виде; в ProtoJSON кодируется как base64.
+  bytes response_body = 7;
+
+  // Код отказа шлюза или транспортной ошибки.
+  optional string error_code = 8;
+
+  // Безопасное описание ошибки без внутренних деталей конфигурации.
+  optional string error_message = 9;
+
+  // Идентификатор бизнес-процесса.
+  optional string correlation_id = 10;
+
+  // Количество выполненных попыток.
+  int32 attempt_count = 11;
+}
+
+// Входящий запрос внешней системы, передаваемый продукту.
+message InboundMessage {
+  // Идентификатор, назначенный шлюзом.
+  string message_id = 1;
+
+  // Имя канала или идентификатор внешней системы.
+  string channel_name = 2;
+
+  // Фактически вызванный HTTP-метод.
+  string http_method = 3;
+
+  // Фактический относительный путь без query string и без percent-декодирования.
+  string relative_path = 4;
+
+  // Шаблон пути из OpenAPI, например /callbacks/contracts/{id}/status.
+  string route_template = 5;
+
+  // operationId из OpenAPI, если задан.
+  optional string operation_id = 6;
+
+  // Content-Type исходного запроса.
+  optional string content_type = 7;
+
+  // Тело запроса в исходном виде; в ProtoJSON кодируется как base64.
+  bytes body = 8;
+
+  // Query-параметры с сохранением порядка и повторов.
+  repeated QueryParameter query_parameters = 9;
+
+  // Время получения запроса.
+  google.protobuf.Timestamp received_at = 10;
+
+  // Идентификатор события от внешней системы, если он действительно передан.
+  optional string external_message_id = 11;
+
+  // Идентификатор связанного процесса, если определён достоверно.
+  optional string correlation_id = 12;
+}

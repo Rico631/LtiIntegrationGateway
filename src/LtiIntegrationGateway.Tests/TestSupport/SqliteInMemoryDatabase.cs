@@ -28,6 +28,13 @@ public sealed class SqliteInMemoryDatabase : IDisposable
 
     public GatewayDbContext CreateContext() => new(CreateOptions());
 
+    /// <summary>Применяет миграции, чтобы тестовая схема совпадала с приложением.</summary>
+    public void Migrate()
+    {
+        using var context = CreateContext();
+        context.Database.Migrate();
+    }
+
     public async Task<long> CountAsync(string sql)
     {
         await using var command = _connection.CreateCommand();
