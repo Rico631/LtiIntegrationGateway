@@ -35,6 +35,27 @@ public sealed class ContractVersion
 
     public ContractVersionStatus Status { get; set; }
 
+    /// <summary>Очередь получателя продуктов; обязательна при публикации версии.</summary>
+    public string? RecipientQueue { get; set; }
+
+    /// <summary>Тип аутентификации входящих вызовов: none, api_key, basic, client_certificate.</summary>
+    public ChannelAuthType AuthType { get; set; }
+
+    /// <summary>Ключ конфигурации, из которого берётся значение секрета входящего вызова.</summary>
+    public string? ConfigKey { get; set; }
+
+    /// <summary>Имя заголовка для типа авторизации api_key.</summary>
+    public string? HeaderName { get; set; }
+
+    /// <summary>Имя пользователя для типа авторизации basic.</summary>
+    public string? UserName { get; set; }
+
+    /// <summary>Квота запросов на окно; null — используется общая квота приложения.</summary>
+    public int? RateLimitPermit { get; set; }
+
+    /// <summary>Окно квоты в секундах; null — используется общее окно приложения.</summary>
+    public int? RateLimitWindowSeconds { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset? PublishedAt { get; set; }
@@ -58,4 +79,10 @@ public sealed class ContractOperation
     public required string Template { get; set; }
 
     public string? OperationId { get; set; }
+
+    /// <summary>
+    /// Схемы тела операции по каждому объявленному Content-Type в виде JSON-объекта
+    /// <c>{ "application/json": { ... } }</c>; локальные <c>$ref</c> уже развёрнуты.
+    /// </summary>
+    public string? RequestSchemas { get; set; }
 }

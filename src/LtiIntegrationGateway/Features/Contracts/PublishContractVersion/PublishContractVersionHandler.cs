@@ -47,6 +47,13 @@ public sealed class PublishContractVersionHandler(
             return new PublishContractVersionResult(version.Version, ["version: опубликованная версия неизменяема"]);
         }
 
+        if (string.IsNullOrWhiteSpace(version.RecipientQueue))
+        {
+            await audit.RecordAsync("PublishContract", target, false, "queue: очередь получателя обязательна", cancellationToken);
+
+            return new PublishContractVersionResult(version.Version, ["queue: очередь получателя обязательна"]);
+        }
+
         var read = await reader.ReadAsync(version.Document, cancellationToken);
         var problems = read.Problems.ToList();
 
@@ -78,6 +85,8 @@ public sealed class PublishContractVersionHandler(
                 HttpMethod = operation.HttpMethod,
                 Template = operation.Template,
                 OperationId = operation.OperationId,
+                RequestSchemas = read.RequestSchemas.GetValueOrDefault(
+                    $"{operation.HttpMethod} {operation.Template}"),
             });
         }
 
@@ -103,7 +112,11 @@ public sealed class PublishContractVersionHandler(
             .ToListAsync(cancellationToken);
 
         return activeVersions
-            .Select(active => ContractRouteSets.Build(active.Id, active.Channel!.Name, active.Operations))
+            .Select(active => ContractRouteSets.Build(
+                active.Id,
+                active.Channel!.Name,
+                active.Operations,
+                ContractVersionSettings.From(active)))
             .ToArray();
     }
 

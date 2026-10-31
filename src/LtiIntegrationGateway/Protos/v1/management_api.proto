@@ -168,6 +168,25 @@ service ManagementService {
     option (google.api.http) = { get: "/v1/channels/{channel_name}/contracts/{version}/operations" };
   }
 
+  // Возвращает версию контракта с настройками входящих вызовов и перечнем операций.
+  //
+  // Настройки включают очередь получателя, тип авторизации с несекретными параметрами и квоту
+  // частоты; значение секрета не возвращается. Если версия не найдена, возвращается gRPC NotFound.
+  // REST: GET /v1/channels/{channel_name}/contracts/{version}
+  rpc GetContractVersion (GetContractVersionRequest) returns (GetContractVersionResponse) {
+    option (google.api.http) = { get: "/v1/channels/{channel_name}/contracts/{version}" };
+  }
+
+  // Изменяет настройки входящих вызовов версии контракта.
+  //
+  // Изменение допускается только для версии в состоянии черновика: опубликованная версия
+  // неизменяема. Очередь получателя обязательна для публикации, но не для сохранения черновика.
+  // Отказы возвращаются в problems с кодами version, auth_type, config_key, user_name, rate_limit.
+  // REST: PATCH /v1/channels/{channel_name}/contracts/{version}/settings
+  rpc UpdateContractVersionSettings (UpdateContractVersionSettingsRequest) returns (ContractOperationResponse) {
+    option (google.api.http) = { patch: "/v1/channels/{channel_name}/contracts/{version}/settings" body: "*" };
+  }
+
   // Возвращает состояние исходящей операции по идентификатору сообщения.
   //
   // Отдаются состояние, исход, HTTP-статус, код ошибки, число попыток и адрес доставки результата.
@@ -446,6 +465,67 @@ message ContractOperationInfo {
 message ListContractOperationsResponse {
   // Операции версии контракта; пустой список допустим для документа без путей.
   repeated ContractOperationInfo operations = 1;
+}
+
+// Запрос версии контракта канала.
+message GetContractVersionRequest {
+  // Имя канала, которому принадлежит контракт.
+  string channel_name = 1;
+
+  // Номер версии контракта; отсутствие версии — gRPC NotFound.
+  int32 version = 2;
+}
+
+// Настройки входящих вызовов версии контракта.
+message ContractVersionSettings {
+  // Очередь получателя продуктов; обязательна при публикации версии.
+  string recipient_queue = 1;
+
+  // Тип авторизации входящих вызовов: none, api_key, basic, client_certificate.
+  string auth_type = 2;
+
+  // Ключ конфигурации, из которого берётся значение секрета; обязателен для api_key, basic
+  // и client_certificate. Значение секрета в базе и в ответах отсутствует.
+  string config_key = 3;
+
+  // Имя заголовка для типа api_key; пустое значение означает заголовок X-Api-Key.
+  string header_name = 4;
+
+  // Имя пользователя для типа basic.
+  string user_name = 5;
+
+  // Квота запросов на окно; 0 — используется общая квота приложения.
+  int32 rate_limit_permit = 6;
+
+  // Окно квоты в секундах; 0 — используется общее окно приложения.
+  int32 rate_limit_window_seconds = 7;
+}
+
+// Ответ с версией контракта.
+message GetContractVersionResponse {
+  // Номер версии.
+  int32 version = 1;
+
+  // Состояние версии: Draft, Published, Active или Superseded.
+  string status = 2;
+
+  // Настройки входящих вызовов версии.
+  ContractVersionSettings settings = 3;
+
+  // Операции версии контракта.
+  repeated ContractOperationInfo operations = 4;
+}
+
+// Запрос изменения настроек входящих вызовов версии контракта.
+message UpdateContractVersionSettingsRequest {
+  // Имя канала, которому принадлежит контракт.
+  string channel_name = 1;
+
+  // Номер версии; изменение допускается только для черновика.
+  int32 version = 2;
+
+  // Новые настройки: отсутствующие значения сбрасываются в значения по умолчанию.
+  ContractVersionSettings settings = 3;
 }
 
 // Результат операции над версией контракта.

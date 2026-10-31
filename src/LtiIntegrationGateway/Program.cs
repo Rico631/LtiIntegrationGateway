@@ -68,9 +68,13 @@ builder.Services.Configure<InboundRateLimitOptions>(
     builder.Configuration.GetSection(InboundRateLimitOptions.SectionName));
 
 builder.Services.AddSingleton<InboundRouteCatalog>();
-builder.Services.AddSingleton<InboundProbeHandler>();
 builder.Services.AddSingleton<InboundEndpointDataSource>();
 builder.Services.AddSingleton<InboundRouteSetValidator>();
+builder.Services.AddSingleton<InboundSchemaCache>();
+builder.Services.AddSingleton<IInboundMessagePublisher, RebusInboundMessagePublisher>();
+builder.Services.AddSingleton<InboundRequestAuthenticator>();
+builder.Services.AddSingleton<InboundMessageLogWriter>();
+builder.Services.AddSingleton<InboundRequestHandler>();
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -78,18 +82,25 @@ builder.Services.AddRateLimiter(options =>
 
     options.AddPolicy(InboundRateLimit.PolicyName, httpContext =>
     {
-        var limits = httpContext.RequestServices
+        var defaults = httpContext.RequestServices
             .GetRequiredService<IOptions<InboundRateLimitOptions>>()
             .Value;
 
-        var channel = httpContext.GetEndpoint()
-            ?.Metadata.GetMetadata<InboundChannelMetadata>()
-            ?.ChannelName ?? "unknown";
+        var route = httpContext.GetEndpoint()?.Metadata.GetMetadata<InboundRouteMetadata>();
 
-        return RateLimitPartition.GetFixedWindowLimiter(channel, _ => new FixedWindowRateLimiterOptions
+        var channel = route?.ChannelName
+            ?? httpContext.GetEndpoint()?.Metadata.GetMetadata<InboundChannelMetadata>()?.ChannelName
+            ?? "unknown";
+
+        var permitLimit = route?.RateLimitPermit ?? defaults.PermitLimit;
+        var windowSeconds = route?.RateLimitWindowSeconds ?? defaults.WindowSeconds;
+
+        var partitionKey = $"{channel}|{permitLimit}|{windowSeconds}";
+
+        return RateLimitPartition.GetFixedWindowLimiter(partitionKey, _ => new FixedWindowRateLimiterOptions
         {
-            PermitLimit = limits.PermitLimit,
-            Window = TimeSpan.FromSeconds(limits.WindowSeconds),
+            PermitLimit = permitLimit,
+            Window = TimeSpan.FromSeconds(windowSeconds),
             QueueLimit = 0,
         });
     });
@@ -101,6 +112,8 @@ builder.Services.AddScoped<UploadContractVersionHandler>();
 builder.Services.AddScoped<PublishContractVersionHandler>();
 builder.Services.AddScoped<ActivateContractVersionHandler>();
 builder.Services.AddScoped<ListContractOperationsHandler>();
+builder.Services.AddScoped<GetContractVersionHandler>();
+builder.Services.AddScoped<UpdateContractVersionSettingsHandler>();
 builder.Services.AddScoped<ManagementApiService>();
 
 builder.Services.Configure<ManagementApiKeyOptions>(

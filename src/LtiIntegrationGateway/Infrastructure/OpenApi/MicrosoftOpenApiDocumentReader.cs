@@ -47,11 +47,15 @@ public sealed class MicrosoftOpenApiDocumentReader : IOpenApiDocumentReader
         var warnings = new List<string>();
 
         OpenApiDocumentValidator.Validate(rootObject, problems, warnings);
+
+        var requestSchemas = OpenApiDocumentValidator.ExtractRequestSchemas(rootObject, problems);
+
         await LoadLibraryAsync(document, problems, cancellationToken);
 
         return new OpenApiReadResult(
             format.Value,
             OpenApiDocumentValidator.ExtractOperations(rootObject),
+            requestSchemas,
             problems.Distinct(StringComparer.Ordinal).ToArray(),
             warnings.Distinct(StringComparer.Ordinal).ToArray());
     }
@@ -123,5 +127,5 @@ public sealed class MicrosoftOpenApiDocumentReader : IOpenApiDocumentReader
     }
 
     private static OpenApiReadResult Failure(OpenApiSourceFormat format, string problem) =>
-        new(format, [], [problem], []);
+        new(format, [], new Dictionary<string, string>(), [problem], []);
 }

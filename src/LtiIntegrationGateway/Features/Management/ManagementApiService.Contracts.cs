@@ -82,6 +82,89 @@ public sealed partial class ManagementApiService
         return response;
     }
 
+    public override async Task<GetContractVersionResponse> GetContractVersion(
+        GetContractVersionRequest request,
+        ServerCallContext context)
+    {
+        var target = $"{request.ChannelName}:v{request.Version}";
+
+        var result = await _getContractVersion.HandleAsync(
+            new Contracts.GetContractVersionQuery(request.ChannelName, request.Version),
+            context.CancellationToken);
+
+        if (result.ContractVersion is null)
+        {
+            await AuditAsync("GetContractVersion", target, false, result.Problems, context.CancellationToken);
+
+            throw new RpcException(new Status(StatusCode.NotFound, "contract version not found"));
+        }
+
+        await AuditAsync("GetContractVersion", target, true, [], context.CancellationToken);
+
+        var details = result.ContractVersion;
+        var response = new GetContractVersionResponse
+        {
+            Version = details.Version,
+            Status = details.Status,
+            Settings = ToSettings(details.Settings),
+        };
+
+        response.Operations.AddRange(details.Operations.Select(operation => new ContractOperationInfo
+        {
+            HttpMethod = operation.HttpMethod,
+            Template = operation.Template,
+            OperationId = operation.OperationId ?? string.Empty,
+        }));
+
+        return response;
+    }
+
+    public override async Task<ContractOperationResponse> UpdateContractVersionSettings(
+        UpdateContractVersionSettingsRequest request,
+        ServerCallContext context)
+    {
+        var problems = new List<string>();
+        var authType = ChannelMapping.ParseAuthType(request.Settings?.AuthType, problems);
+
+        if (request.Settings is null)
+        {
+            problems.Add("settings: настройки обязательны");
+        }
+
+        if (problems.Count > 0)
+        {
+            return ToContractResponse(false, request.Version, null, problems, []);
+        }
+
+        var settings = new Contracts.ContractVersionSettings(
+            request.Settings!.RecipientQueue,
+            authType,
+            request.Settings.ConfigKey,
+            request.Settings.HeaderName,
+            request.Settings.UserName,
+            request.Settings.RateLimitPermit > 0 ? request.Settings.RateLimitPermit : null,
+            request.Settings.RateLimitWindowSeconds > 0 ? request.Settings.RateLimitWindowSeconds : null);
+
+        var result = await _updateContractVersionSettings.HandleAsync(
+            new Contracts.UpdateContractVersionSettingsCommand(request.ChannelName, request.Version, settings),
+            context.CancellationToken);
+
+        ThrowIfMissing(result.Version, result.Problems);
+
+        return ToContractResponse(result.Problems.Count == 0, result.Version, null, result.Problems, []);
+    }
+
+    private static ContractVersionSettings ToSettings(Contracts.ContractVersionSettings settings) => new()
+    {
+        RecipientQueue = settings.RecipientQueue ?? string.Empty,
+        AuthType = ChannelMapping.FormatAuthType(settings.AuthType),
+        ConfigKey = settings.ConfigKey ?? string.Empty,
+        HeaderName = settings.HeaderName ?? string.Empty,
+        UserName = settings.UserName ?? string.Empty,
+        RateLimitPermit = settings.RateLimitPermit ?? 0,
+        RateLimitWindowSeconds = settings.RateLimitWindowSeconds ?? 0,
+    };
+
     private static ContractOperationResponse ToContractResponse(
         bool succeeded,
         int? version,

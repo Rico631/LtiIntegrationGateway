@@ -13,11 +13,24 @@ internal static class ContractRouteSets
     public static InboundRouteSet Build(
         Guid contractVersionId,
         string channelName,
-        IEnumerable<ContractOperation> operations) =>
+        IEnumerable<ContractOperation> operations,
+        ContractVersionSettings settings) =>
         new(
             RevisionKey(contractVersionId),
             operations
-                .Select(operation => new InboundRouteDefinition(channelName, operation.HttpMethod, operation.Template))
+                .Select(operation => new InboundRouteDefinition(
+                    channelName,
+                    operation.HttpMethod,
+                    operation.Template,
+                    contractVersionId,
+                    operation.OperationId,
+                    settings.RecipientQueue,
+                    settings.AuthType,
+                    settings.ConfigKey,
+                    settings.HeaderName,
+                    settings.UserName,
+                    settings.RateLimitPermit,
+                    settings.RateLimitWindowSeconds))
                 .ToArray());
 
     public static InboundRouteSet Build(
@@ -30,4 +43,5 @@ internal static class ContractRouteSets
                 .Select(operation => new InboundRouteDefinition(channelName, operation.HttpMethod, operation.Template))
                 .ToArray());
 }
+
 

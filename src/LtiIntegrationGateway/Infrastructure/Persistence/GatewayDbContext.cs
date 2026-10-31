@@ -56,6 +56,8 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
 
     public DbSet<ManagementAuditEntry> ManagementAuditEntries => Set<ManagementAuditEntry>();
 
+    public DbSet<InboundMessageLog> InboundMessageLogs => Set<InboundMessageLog>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Channel>(channel =>
@@ -193,6 +195,11 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
             version.Property(entity => entity.SourceFormat).HasConversion<string>().HasMaxLength(16);
             version.Property(entity => entity.Status).HasConversion<string>().HasMaxLength(16);
             version.Property(entity => entity.Document).IsRequired();
+            version.Property(entity => entity.RecipientQueue).HasMaxLength(256);
+            version.Property(entity => entity.AuthType).HasConversion<string>().HasMaxLength(32);
+            version.Property(entity => entity.ConfigKey).HasMaxLength(256);
+            version.Property(entity => entity.HeaderName).HasMaxLength(128);
+            version.Property(entity => entity.UserName).HasMaxLength(128);
             version.HasIndex(entity => new { entity.ChannelId, entity.Version }).IsUnique();
             version.HasIndex(entity => new { entity.ChannelId, entity.Status });
 
@@ -220,6 +227,23 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
             audit.Property(entity => entity.Result).HasMaxLength(16).IsRequired();
             audit.Property(entity => entity.Details).HasMaxLength(2048);
             audit.HasIndex(entity => entity.Operation);
+        });
+
+        modelBuilder.Entity<InboundMessageLog>(log =>
+        {
+            log.HasKey(entity => entity.Id);
+            log.Property(entity => entity.MessageId).HasMaxLength(128).IsRequired();
+            log.Property(entity => entity.ChannelName).HasMaxLength(64).IsRequired();
+            log.Property(entity => entity.HttpMethod).HasMaxLength(16).IsRequired();
+            log.Property(entity => entity.RelativePath).HasMaxLength(2048).IsRequired();
+            log.Property(entity => entity.RouteTemplate).HasMaxLength(2048);
+            log.Property(entity => entity.OperationId).HasMaxLength(256);
+            log.Property(entity => entity.ContentType).HasMaxLength(256);
+            log.Property(entity => entity.QueryParameters).HasMaxLength(4096);
+            log.Property(entity => entity.DeliveryStatus).HasConversion<string>().HasMaxLength(16);
+            log.Property(entity => entity.ErrorCode).HasMaxLength(64);
+            log.HasIndex(entity => entity.MessageId);
+            log.HasIndex(entity => new { entity.ChannelName, entity.ReceivedAt });
         });
     }
 

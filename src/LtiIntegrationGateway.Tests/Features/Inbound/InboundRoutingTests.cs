@@ -1,28 +1,39 @@
 using System.Net;
-using System.Text.Json;
+using LtiIntegrationGateway.Infrastructure.Persistence;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
 using LtiIntegrationGateway.Infrastructure.Routing;
 using LtiIntegrationGateway.Tests.TestSupport;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace LtiIntegrationGateway.Tests.Features.Inbound;
 
 public class InboundRoutingTests
 {
+    private const string RecipientQueue = "product.inbound";
+
     private static InboundRouteSet Set(
         string revisionKey,
         params (string Channel, string Method, string Template)[] routes) =>
         new(revisionKey, routes
-            .Select(route => new InboundRouteDefinition(route.Channel, route.Method, route.Template))
+            .Select(route => new InboundRouteDefinition(
+                route.Channel,
+                route.Method,
+                route.Template,
+                RecipientQueue: RecipientQueue))
             .ToArray());
 
     private static InboundRouteCatalog CatalogOf(GatewayWebApplicationFactory factory) =>
         factory.Services.GetRequiredService<InboundRouteCatalog>();
 
-    private static async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response)
+    private static async Task<IReadOnlyList<InboundMessageLog>> LogsAsync(GatewayWebApplicationFactory factory)
     {
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
 
-        return document.RootElement.Clone();
+        return (await db.InboundMessageLogs.AsNoTracking().ToArrayAsync())
+            .OrderBy(entry => entry.ReceivedAt)
+            .ToArray();
     }
 
     [Test]
@@ -41,7 +52,7 @@ public class InboundRoutingTests
 
         var after = await client.GetAsync("/callbacks/contracts");
 
-        await Assert.That(after.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        await Assert.That(after.StatusCode).IsEqualTo(HttpStatusCode.Accepted);
     }
 
     [Test]
@@ -53,11 +64,13 @@ public class InboundRoutingTests
         var catalog = CatalogOf(factory);
         catalog.Activate(Set("rev-1", ("bank-a", "GET", "/callbacks/orders")));
 
-        await Assert.That((await client.GetAsync("/callbacks/orders")).StatusCode).IsEqualTo(HttpStatusCode.OK);
+        await Assert.That((await client.GetAsync("/callbacks/orders")).StatusCode)
+            .IsEqualTo(HttpStatusCode.Accepted);
 
         catalog.Deactivate("rev-1");
 
-        await Assert.That((await client.GetAsync("/callbacks/orders")).StatusCode).IsEqualTo(HttpStatusCode.NotFound);
+        await Assert.That((await client.GetAsync("/callbacks/orders")).StatusCode)
+            .IsEqualTo(HttpStatusCode.NotFound);
     }
 
     [Test]
@@ -74,6 +87,27 @@ public class InboundRoutingTests
     }
 
     [Test]
+    public async Task Accepted_call_is_journaled_with_selected_route()
+    {
+        using var factory = GatewayWebApplicationFactory.WithStorage();
+        using var client = factory.CreateClient();
+
+        CatalogOf(factory).Activate(Set("rev-1", ("bank-a", "PATCH", "/callbacks/contracts/{id}/status")));
+
+        var response = await client.PatchAsync("/callbacks/contracts/42/status?source=crm", null);
+
+        var logs = await LogsAsync(factory);
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.Accepted);
+        await Assert.That(logs.Count).IsEqualTo(1);
+        await Assert.That(logs[0].HttpMethod).IsEqualTo("PATCH");
+        await Assert.That(logs[0].RouteTemplate).IsEqualTo("/callbacks/contracts/{id}/status");
+        await Assert.That(logs[0].RelativePath).IsEqualTo("/callbacks/contracts/42/status");
+        await Assert.That(logs[0].ChannelName).IsEqualTo("bank-a");
+        await Assert.That(logs[0].DeliveryStatus).IsEqualTo(InboundDeliveryStatus.Sent);
+    }
+
+    [Test]
     public async Task Conflicting_set_is_rejected_and_active_set_keeps_serving()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage();
@@ -87,11 +121,12 @@ public class InboundRoutingTests
         await Assert.That(conflicting.Succeeded).IsFalse();
         await Assert.That(catalog.ActiveRevisionKeys).IsEquivalentTo(new[] { "rev-1" });
 
-        var response = await client.GetAsync("/callbacks/orders/17");
-        var body = await ReadJsonAsync(response);
+        await Assert.That((await client.GetAsync("/callbacks/orders/17")).StatusCode)
+            .IsEqualTo(HttpStatusCode.Accepted);
 
-        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
-        await Assert.That(body.GetProperty("channel").GetString()).IsEqualTo("bank-a");
+        var logs = await LogsAsync(factory);
+
+        await Assert.That(logs.Single().ChannelName).IsEqualTo("bank-a");
     }
 
     [Test]
@@ -116,7 +151,7 @@ public class InboundRoutingTests
 
         await Assert.That(activation.Succeeded).IsTrue();
         await Assert.That((await client.PostAsync("/callbacks/contracts", null)).StatusCode)
-            .IsEqualTo(HttpStatusCode.OK);
+            .IsEqualTo(HttpStatusCode.Accepted);
     }
 
     [Test]
@@ -131,10 +166,11 @@ public class InboundRoutingTests
             ("bank-a", "GET", "/callbacks/health")));
 
         var response = await client.GetAsync("/callbacks/health");
-        var body = await ReadJsonAsync(response);
 
-        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
-        await Assert.That(body.GetProperty("routeTemplate").GetString()).IsEqualTo("/callbacks/health");
+        var logs = await LogsAsync(factory);
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.Accepted);
+        await Assert.That(logs.Single().RouteTemplate).IsEqualTo("/callbacks/health");
     }
 
     [Test]
@@ -148,31 +184,14 @@ public class InboundRoutingTests
             ("bank-a", "GET", "/callbacks/{name}"),
             ("bank-a", "GET", "/callbacks/health")));
 
-        var first = await ReadJsonAsync(await client.GetAsync("/callbacks/payments"));
-        var second = await ReadJsonAsync(await client.GetAsync("/callbacks/payments"));
+        await client.GetAsync("/callbacks/payments");
+        await client.GetAsync("/callbacks/payments");
 
-        await Assert.That(first.GetProperty("routeTemplate").GetString()).IsEqualTo("/callbacks/{name}");
-        await Assert.That(second.GetProperty("routeTemplate").GetString()).IsEqualTo("/callbacks/{name}");
-    }
+        var logs = await LogsAsync(factory);
 
-    [Test]
-    public async Task Probe_response_describes_selected_route()
-    {
-        using var factory = GatewayWebApplicationFactory.WithStorage();
-        using var client = factory.CreateClient();
-
-        CatalogOf(factory).Activate(Set("rev-1", ("bank-a", "PATCH", "/callbacks/contracts/{id}/status")));
-
-        var response = await client.PatchAsync("/callbacks/contracts/42/status?source=crm", null);
-        var body = await ReadJsonAsync(response);
-
-        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
-        await Assert.That(body.GetProperty("httpMethod").GetString()).IsEqualTo("PATCH");
-        await Assert.That(body.GetProperty("routeTemplate").GetString())
-            .IsEqualTo("/callbacks/contracts/{id}/status");
-        await Assert.That(body.GetProperty("relativePath").GetString())
-            .IsEqualTo("/callbacks/contracts/42/status");
-        await Assert.That(body.GetProperty("channel").GetString()).IsEqualTo("bank-a");
+        await Assert.That(logs.Count).IsEqualTo(2);
+        await Assert.That(logs.All(entry => entry.RouteTemplate == "/callbacks/{name}")).IsTrue();
+        await Assert.That(logs.All(entry => entry.RelativePath == "/callbacks/payments")).IsTrue();
     }
 
     [Test]

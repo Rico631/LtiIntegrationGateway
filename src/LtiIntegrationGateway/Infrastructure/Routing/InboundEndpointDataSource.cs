@@ -12,7 +12,7 @@ namespace LtiIntegrationGateway.Infrastructure.Routing;
 /// </summary>
 public sealed class InboundEndpointDataSource(
     InboundRouteCatalog catalog,
-    InboundProbeHandler probeHandler) : EndpointDataSource
+    InboundRequestHandler requestHandler) : EndpointDataSource
 {
     private readonly object _gate = new();
 
@@ -46,12 +46,23 @@ public sealed class InboundEndpointDataSource(
     private Endpoint BuildEndpoint(InboundRouteDefinition route)
     {
         var builder = new RouteEndpointBuilder(
-            probeHandler.HandleAsync,
+            requestHandler.HandleAsync,
             RoutePatternFactory.Parse(route.Template),
             order: 0);
 
         builder.Metadata.Add(new HttpMethodMetadata(new[] { route.HttpMethod.ToUpperInvariant() }));
         builder.Metadata.Add(new InboundChannelMetadata(route.ChannelName));
+        builder.Metadata.Add(new InboundRouteMetadata(
+            route.ChannelName,
+            route.ContractVersionId,
+            route.OperationId,
+            route.RecipientQueue,
+            route.AuthType,
+            route.ConfigKey,
+            route.HeaderName,
+            route.UserName,
+            route.RateLimitPermit,
+            route.RateLimitWindowSeconds));
         builder.Metadata.Add(new EnableRateLimitingAttribute(InboundRateLimit.PolicyName));
 
         return builder.Build();

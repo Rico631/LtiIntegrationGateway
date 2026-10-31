@@ -64,13 +64,13 @@
 | `Features/Channels` | канал и его ревизии: создание, черновик, публикация, активация, откат, чтение | spec `channel-registry` |
 | `Features/ProductRoutes` | маршруты продуктов: разрешённые каналы и адреса очередей | spec `outbound-dispatch` |
 | `Features/Outbound` | обработка `OutboundRequest`: проверки, авторизация, HTTP с повторами, операция и журнал, публикация результата | spec `outbound-dispatch` |
-| `Features/Contracts` | версии OpenAPI-контрактов: загрузка, публикация, активация, чтение операций | spec `contract-registry` |
-| `Features/Inbound` | обработчик динамических входящих маршрутов (диагностический ответ спайка) | spec `inbound-routing` |
+| `Features/Contracts` | версии OpenAPI-контрактов: загрузка, публикация со схемами тела, настройки приёма, активация, чтение версии и операций | spec `contract-registry`, `management-api` |
+| `Features/Inbound` | приём входящего вызова: проверки, аутентификация, публикация `InboundMessage`, журнал | spec `inbound-dispatch`, `inbound-routing` |
 | `Features/Management` | gRPC-фасад управляющего API и маппинг proto ↔ домен | spec `management-api` |
 | `Infrastructure/Persistence` | `GatewayDbContext`, сущности, миграции | ADR §11 |
 | `Infrastructure/Rebus` | `ProtobufSerializer`, `ProtobufMessageRegistry`, конфигурация шины | ADR §5.3, §10 |
-| `Infrastructure/OpenApi` | чтение документа и fail-closed проверки | ADR §14 |
-| `Infrastructure/Routing` | каталог маршрутов, источник endpoint'ов, валидатор набора, лимит частоты | ADR §5.2 |
+| `Infrastructure/OpenApi` | чтение документа, fail-closed проверки, извлечение и кэширование схем тела | ADR §14 |
+| `Infrastructure/Routing` | каталог маршрутов, источник endpoint'ов, валидатор набора, метаданные маршрута, лимит частоты | ADR §5.2, §9.6 |
 | `Infrastructure/Security` | `ISecretStore` и реализация поверх `IConfiguration` | ADR §7.5, §13 |
 | `Infrastructure/Management` | ключ управляющего API, аудит управляющих операций | ADR §13, §15.1 |
 
@@ -117,30 +117,41 @@ Features/Outbound
 └── OutboundErrorCodes            коды отказов и транспортных ошибок
 ```
 
-### Контракты (spec `contract-registry`)
+### Контракты (spec `contract-registry`, `management-api`)
 
 ```text
 Features/Contracts
-├── UploadContractVersion      документ → черновик версии
-├── PublishContractVersion     операции, дубли operationId, конфликты шаблонов
-├── ActivateContractVersion    каталог маршрутов → транзакция БД
-├── ListContractOperations     операции версии
-└── ContractRouteSets          InboundRouteSet из операций версии
+├── UploadContractVersion          документ → черновик версии
+├── PublishContractVersion         операции, схемы тела, дубли operationId, конфликты, очередь
+├── ActivateContractVersion        каталог маршрутов + кэш схем → транзакция БД
+├── ListContractOperations         операции версии
+├── GetContractVersion             версия с настройками и операциями
+├── UpdateContractVersionSettings  настройки приёма черновика
+├── ContractVersionSettings        настройки приёма (record)
+└── ContractRouteSets              InboundRouteSet из операций версии с настройками
 ```
 
-### Входящая маршрутизация (spec `inbound-routing`)
+### Входящий контур (spec `inbound-dispatch`)
 
 ```text
 Features/Inbound
-└── InboundProbeHandler        диагностический ответ динамического маршрута
+├── InboundRequestHandler          порядок проверок, InboundMessage, журнал, 202/503
+├── InboundRequestAuthenticator    none, api_key, basic, client_certificate
+├── InboundMessageLogWriter        запись pending → sent | failed
+└── InboundMessagePublisher        IInboundMessagePublisher + Rebus-реализация
 
 Infrastructure/Routing
-├── InboundRouteDefinition     маршрут, набор ревизии, результат активации
+├── InboundRouteDefinition     маршрут с настройками ревизии, набор, результат активации
 ├── InboundRouteCatalog        активные наборы, снапшот, токен изменения
 ├── InboundRouteSetValidator   методы, шаблоны, конфликты
-├── InboundEndpointDataSource  RouteEndpoint'ы и перестройка matcher
+├── InboundEndpointDataSource  RouteEndpoint'ы, метаданные маршрута, делегат приёма
 ├── InboundChannelMetadata     канал как ключ лимита частоты
-└── InboundRateLimitOptions    квота и окно
+├── InboundRouteMetadata       ревизия, операция, очередь, авторизация, квота
+└── InboundRateLimitOptions    квота и окно по умолчанию
+
+Infrastructure/OpenApi
+├── InboundSchemaCache         компиляция схем на ревизию, удаление при деактивации
+└── OpenApiDocumentValidator   извлечение схем тела с инлайнингом локальных $ref
 ```
 
 ### Управляющий API (spec `management-api`)
@@ -162,13 +173,14 @@ Features/Management
 | Компонент | Ответственность | Особенности |
 |---|---|---|
 | `Persistence/GatewayDbContext` | модель данных и конфигурация EF Core | уникальные индексы, каскады, конвертация enum и политики повторов в строку/JSON |
-| `Persistence/Entities` | каналы и ревизии, маршруты продуктов, контракты, операции и журналы | опубликованные ревизии неизменяемы |
-| `Persistence/Migrations` | `InitialChannelRegistry`, `AddOutboundDispatch`, `AddContractRegistry` | применяются при старте |
+| `Persistence/Entities` | каналы и ревизии, маршруты продуктов, контракты с настройками приёма, операции со схемами, журналы | опубликованные ревизии и версии контрактов неизменяемы |
+| `Persistence/Migrations` | `InitialChannelRegistry`, `AddOutboundDispatch`, `AddContractRegistry`, `AddInboundDispatch` | применяются при старте |
 | `Rebus/ProtobufSerializer` | `ISerializer` на ProtoJSON | заголовки `rbs2-msg-type` и `rbs2-content-type` |
 | `Rebus/ProtobufMessageRegistry` | реестр типов сообщений | неизвестный тип — диагностируемая ошибка |
 | `Rebus/RebusConfigurationExtensions` | регистрация шины и обработчика | очередь `lti.gateway.outbound` |
 | `OpenApi/MicrosoftOpenApiDocumentReader` | чтение документа, версия, синтаксис | `Microsoft.OpenApi` 3.11.0 (ADR §14) |
-| `OpenApi/OpenApiDocumentValidator` | fail-closed проверки и извлечение операций | запрещённые ключевые слова, `$ref`, `format` |
+| `OpenApi/OpenApiDocumentValidator` | fail-closed проверки, извлечение операций и схем тела | запрещённые ключевые слова, `$ref`, `format`; инлайнинг `$ref` до глубины 32 |
+| `OpenApi/InboundSchemaCache` | скомпилированные схемы активных ревизий | `NJsonSchema` 11.6.1, компиляция при активации |
 | `Management/ManagementApiKeyMiddleware` | ключ управляющего API | `401`/`503`, gRPC `Unauthenticated` |
 | `Management/ManagementAuditWriter` | аудит управляющих операций | без значений секретов |
 | `Security/ConfigurationSecretStore` | значение секрета по ключу | только `IConfiguration` |
@@ -193,10 +205,17 @@ Features/Management
 `pending` → `Send` результата → журнал `sent`. Отказы фиксируются в журнале и возвращаются продукту
 (ADR §8, spec `outbound-dispatch`).
 
-**Контракты.** Загрузка создаёт черновик версии; публикация извлекает операции и проверяет
-конфликты; активация сначала регистрирует набор в каталоге маршрутов, затем одной транзакцией меняет
-статусы версий и снимает набор предыдущей версии; при проблемах каталога база не меняется
+**Контракты.** Загрузка создаёт черновик версии; публикация извлекает операции и схемы тела
+(локальные `$ref` разворачиваются), требует очередь получателя и проверяет конфликты; активация
+сначала регистрирует набор в каталоге маршрутов, затем одной транзакцией меняет статусы версий,
+снимает набор предыдущей версии и пересобирает кэш схем; при проблемах каталога база не меняется
 (ADR §5.2, spec `contract-registry`).
+
+**Входящий контур.** Запрос попадает на динамический endpoint с метаданными маршрута, далее
+фиксированный порядок: query (≤ 64) → `Content-Type` по схемам ревизии → наличие схемы тела →
+аутентификация по настройкам ревизии → глубина JSON (≤ 64) → валидация по схеме → запись журнала
+`pending` → `Send` в очередь получателя → журнал `sent` и `202`. Любой отказ пишется в журнал
+`failed` с кодом ошибки; при сбое `Send` ответ `503` (ADR §9.6, spec `inbound-dispatch`).
 
 **Каналы.** Ревизия — агрегат настроек: правки идут в черновик, публикация фиксирует неизменяемую
 ревизию, активация делает её действующей, откат возвращает предыдущую (spec `channel-registry`).
@@ -216,6 +235,10 @@ Features/Management
 | Динамические endpoint'ы добавляются в `IEndpointRouteBuilder.DataSources` | регистрации `EndpointDataSource` в DI недостаточно (ADR §5.2) |
 | gRPC-сервисы публикуются в корне | transcoding сохраняет пути `/v1/...`; следствие — двухсегментные inbound-маршруты отвечают `404` вместо `405` (ADR §15.2) |
 | Секреты читаются только через `ISecretStore` | в базе и API хранятся лишь ключи конфигурации |
+| Схемы тела компилируются один раз на ревизию | валидация не тратит CPU на каждый запрос (ADR §14) |
+| Публикация сообщения идёт через `IInboundMessagePublisher` | транспорт изолирован, сбой передачи наблюдаем в тестах |
+| Запись журнала `pending` создаётся до `Send` | сбой передачи виден в журнале, а не теряется |
+| Сравнение секретов — `CryptographicOperations.FixedTimeEquals` | исключение утечки по времени (ADR §13) |
 
 ## 9. Тесты
 
@@ -227,10 +250,10 @@ Features/Management
 | `Features/Host` | liveness, конфигурация хранилища, отсутствие демо-API, регистрация обработчиков |
 | `Features/Channels` | валидатор настроек, жизненный цикл ревизий, сохранение до `DbContext` |
 | `Features/Outbound` | успешный вызов, отказы, авторизация, повторы, идемпотентность |
-| `Features/Inbound` | активация и деактивация маршрутов, конфликты, приоритеты, лимит частоты |
-| `Features/Contracts` | загрузка и проверка документов, публикация, активация маршрутов |
+| `Features/Inbound` | маршрутизация, приём вызова, аутентификация, коды ответов, журнал, лимит частоты |
+| `Features/Contracts` | загрузка и проверка документов, публикация, настройки версии, активация маршрутов |
 | `Features/Management` | ключ API, паритет gRPC/REST, каналы, маршруты, статус операции |
-| `Infrastructure/*` | сериализация и реестр Rebus, `DbContext`, каталог маршрутов, чтение OpenAPI |
+| `Infrastructure/*` | сериализация и реестр Rebus, `DbContext`, каталог маршрутов, чтение OpenAPI, извлечение и компиляция схем |
 
 `TestSupport`:
 
@@ -238,6 +261,8 @@ Features/Management
 - `GatewayWebApplicationFactory` — хост с подменой строки подключения и дополнительными ключами
   конфигурации;
 - `OutboundFixture` — SQLite, тестовый HTTP-обработчик и два in-memory endpoint'а Rebus;
+- `InboundFixture` — SQLite, тестовые секреты, `DefaultHttpContext` с метаданными маршрута и два
+  in-memory endpoint'а Rebus (шлюз и продукт), подмена публикатора для сбоя передачи;
 - `ManagementApi` — REST-клиент с ключом и in-process gRPC-канал;
 - `OpenApiSamples`, `RecordingHttpMessageHandler`, `ContractJson`, `InMemoryLogger*`.
 
@@ -257,6 +282,7 @@ Features/Management
 | `2026-10-29-outbound-dispatch` | `outbound-dispatch` | `Features/Outbound`, `Features/ProductRoutes`, `Infrastructure/Security`, операции и журнал |
 | `2026-10-29-inbound-routing-spike` | `inbound-routing` | `Infrastructure/Routing`, `Features/Inbound`, лимит частоты |
 | `2026-10-29-management-grpc-api` | `management-api`, `contract-registry` | `Protos/v1/management_api.proto`, `Features/Management`, `Features/Contracts`, `Infrastructure/OpenApi`, `Infrastructure/Management`, миграция контрактов |
+| `2026-10-29-inbound-dispatch` | `inbound-dispatch` (+ `inbound-routing`, `contract-registry`, `management-api`) | приём вызова, аутентификация, схемы тела, журнал `InboundMessageLog`, настройки версии контракта, миграция `AddInboundDispatch` |
 
 ## 11. Поддержание актуальности
 

@@ -195,6 +195,9 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("RequestSchemas")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Template")
                         .IsRequired()
                         .HasMaxLength(2048)
@@ -217,7 +220,16 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("ActivatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("AuthType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("ChannelId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ConfigKey")
+                        .HasMaxLength(256)
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset>("CreatedAt")
@@ -227,7 +239,21 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("HeaderName")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTimeOffset?>("PublishedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("RateLimitPermit")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("RateLimitWindowSeconds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RecipientQueue")
+                        .HasMaxLength(256)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("SourceFormat")
@@ -238,6 +264,10 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserName")
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Version")
@@ -251,6 +281,76 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("ContractVersions");
+                });
+
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.InboundMessageLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ChannelName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ContentType")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("ContractVersionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeliveryStatus")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("HttpMethod")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MessageId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OperationId")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("QueryParameters")
+                        .HasMaxLength(4096)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("ReceivedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RelativePath")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("RequestBody")
+                        .IsRequired()
+                        .HasColumnType("BLOB");
+
+                    b.Property<string>("RouteTemplate")
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MessageId");
+
+                    b.HasIndex("ChannelName", "ReceivedAt");
+
+                    b.ToTable("InboundMessageLogs");
                 });
 
             modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ManagementAuditEntry", b =>

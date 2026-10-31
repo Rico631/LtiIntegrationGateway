@@ -29,6 +29,8 @@ public sealed partial class ManagementApiService : ManagementService.ManagementS
     private readonly PublishContractVersionHandler _publishContractVersion;
     private readonly ActivateContractVersionHandler _activateContractVersion;
     private readonly ListContractOperationsHandler _listContractOperations;
+    private readonly GetContractVersionHandler _getContractVersion;
+    private readonly UpdateContractVersionSettingsHandler _updateContractVersionSettings;
     private readonly ManagementAuditWriter _audit;
 
     public ManagementApiService(
@@ -45,6 +47,8 @@ public sealed partial class ManagementApiService : ManagementService.ManagementS
         PublishContractVersionHandler publishContractVersion,
         ActivateContractVersionHandler activateContractVersion,
         ListContractOperationsHandler listContractOperations,
+        GetContractVersionHandler getContractVersion,
+        UpdateContractVersionSettingsHandler updateContractVersionSettings,
         ManagementAuditWriter audit)
     {
         _db = db;
@@ -60,6 +64,8 @@ public sealed partial class ManagementApiService : ManagementService.ManagementS
         _publishContractVersion = publishContractVersion;
         _activateContractVersion = activateContractVersion;
         _listContractOperations = listContractOperations;
+        _getContractVersion = getContractVersion;
+        _updateContractVersionSettings = updateContractVersionSettings;
         _audit = audit;
     }
 

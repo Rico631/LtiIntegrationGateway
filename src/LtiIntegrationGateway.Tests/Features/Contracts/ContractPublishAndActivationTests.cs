@@ -34,6 +34,24 @@ public class ContractPublishAndActivationTests
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
     }
 
+    private static async Task SetRecipientQueueAsync(
+        ManagementService.ManagementServiceClient client,
+        string channelName,
+        int version = 1,
+        string queue = "product.inbound")
+    {
+        var update = await client.UpdateContractVersionSettingsAsync(
+            new UpdateContractVersionSettingsRequest
+            {
+                ChannelName = channelName,
+                Version = version,
+                Settings = new ContractVersionSettings { RecipientQueue = queue },
+            },
+            ManagementApi.Call());
+
+        await Assert.That(update.Succeeded).IsTrue();
+    }
+
     private static async Task PublishAndActivateAsync(
         ManagementService.ManagementServiceClient client,
         string channelName,
@@ -43,6 +61,8 @@ public class ContractPublishAndActivationTests
         await client.UploadContractAsync(
             new UploadContractRequest { ChannelName = channelName, Document = document },
             ManagementApi.Call());
+
+        await SetRecipientQueueAsync(client, channelName, version);
 
         var publish = await client.PublishContractVersionAsync(
             new PublishContractVersionRequest { ChannelName = channelName, Version = version },
@@ -74,6 +94,8 @@ public class ContractPublishAndActivationTests
                 Document = OpenApiSamples.OpenApi30(("POST", "/callbacks/contracts", "receiveContract")),
             },
             ManagementApi.Call());
+
+        await SetRecipientQueueAsync(grpc, "bank-a");
 
         var publish = await grpc.PublishContractVersionAsync(
             new PublishContractVersionRequest { ChannelName = "bank-a", Version = 1 },
@@ -110,6 +132,8 @@ public class ContractPublishAndActivationTests
             },
             ManagementApi.Call());
 
+        await SetRecipientQueueAsync(grpc, "bank-a");
+
         var publish = await grpc.PublishContractVersionAsync(
             new PublishContractVersionRequest { ChannelName = "bank-a", Version = 1 },
             ManagementApi.Call());
@@ -139,6 +163,8 @@ public class ContractPublishAndActivationTests
             },
             ManagementApi.Call());
 
+        await SetRecipientQueueAsync(grpc, "bank-b");
+
         var publish = await grpc.PublishContractVersionAsync(
             new PublishContractVersionRequest { ChannelName = "bank-b", Version = 1 },
             ManagementApi.Call());
@@ -148,7 +174,7 @@ public class ContractPublishAndActivationTests
 
         var stillServed = await http.PostAsync("/callbacks/contracts", null);
 
-        await Assert.That(stillServed.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        await Assert.That(stillServed.StatusCode).IsEqualTo(HttpStatusCode.Accepted);
     }
 
     [Test]
@@ -164,7 +190,7 @@ public class ContractPublishAndActivationTests
         await PublishAndActivateAsync(grpc, "bank-a", OpenApiSamples.OpenApi30WithPath("POST", "/callbacks/contracts"));
 
         await Assert.That((await http.PostAsync("/callbacks/contracts", null)).StatusCode)
-            .IsEqualTo(HttpStatusCode.OK);
+            .IsEqualTo(HttpStatusCode.Accepted);
 
         await grpc.UploadContractAsync(
             new UploadContractRequest
@@ -173,6 +199,8 @@ public class ContractPublishAndActivationTests
                 Document = OpenApiSamples.OpenApi30WithPath("GET", "/callbacks/other"),
             },
             ManagementApi.Call());
+
+        await SetRecipientQueueAsync(grpc, "bank-a", version: 2);
 
         await grpc.PublishContractVersionAsync(
             new PublishContractVersionRequest { ChannelName = "bank-a", Version = 2 },
@@ -186,7 +214,7 @@ public class ContractPublishAndActivationTests
         await Assert.That((await http.PostAsync("/callbacks/contracts", null)).StatusCode)
             .IsEqualTo(HttpStatusCode.NotFound);
         await Assert.That((await http.GetAsync("/callbacks/other")).StatusCode)
-            .IsEqualTo(HttpStatusCode.OK);
+            .IsEqualTo(HttpStatusCode.Accepted);
 
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
@@ -212,6 +240,8 @@ public class ContractPublishAndActivationTests
                 Document = OpenApiSamples.OpenApi30WithPath("POST", "/callbacks/contracts"),
             },
             ManagementApi.Call());
+
+        await SetRecipientQueueAsync(grpc, "bank-a");
 
         await grpc.PublishContractVersionAsync(
             new PublishContractVersionRequest { ChannelName = "bank-a", Version = 1 },

@@ -136,4 +136,111 @@ public static class OpenApiSamples
       }
     }
     """;
+
+    public const string WithInlineBody = """
+    {
+      "openapi": "3.0.3",
+      "info": { "title": "sample", "version": "1.0.0" },
+      "paths": {
+        "/callbacks/contracts": {
+          "post": {
+            "operationId": "receiveContract",
+            "requestBody": {
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "required": ["contractNumber"],
+                    "properties": { "contractNumber": { "type": "string" } },
+                    "additionalProperties": false
+                  }
+                }
+              }
+            },
+            "responses": { "202": { "description": "accepted" } }
+          }
+        }
+      }
+    }
+    """;
+
+    public const string WithReferencedBody = """
+    {
+      "openapi": "3.0.3",
+      "info": { "title": "sample", "version": "1.0.0" },
+      "paths": {
+        "/callbacks/contracts": {
+          "post": {
+            "requestBody": {
+              "content": {
+                "application/json": { "schema": { "$ref": "#/components/schemas/Contract" } }
+              }
+            },
+            "responses": { "202": { "description": "accepted" } }
+          }
+        }
+      },
+      "components": {
+        "schemas": {
+          "Contract": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+              "id": { "type": "string" },
+              "nested": { "$ref": "#/components/schemas/Nested" }
+            }
+          },
+          "Nested": { "type": "object", "properties": { "value": { "type": "integer" } } }
+        }
+      }
+    }
+    """;
+
+    public const string WithTwoContentTypes = """
+    {
+      "openapi": "3.0.3",
+      "info": { "title": "sample", "version": "1.0.0" },
+      "paths": {
+        "/callbacks/contracts": {
+          "post": {
+            "requestBody": {
+              "content": {
+                "application/json": { "schema": { "type": "object" } },
+                "text/plain": { "schema": { "type": "string" } }
+              }
+            },
+            "responses": { "202": { "description": "accepted" } }
+          }
+        }
+      }
+    }
+    """;
+
+    public const string WithCyclicReference = """
+    {
+      "openapi": "3.0.3",
+      "info": { "title": "sample", "version": "1.0.0" },
+      "paths": {
+        "/callbacks/contracts": {
+          "post": {
+            "requestBody": {
+              "content": {
+                "application/json": { "schema": { "$ref": "#/components/schemas/Node" } }
+              }
+            },
+            "responses": { "202": { "description": "accepted" } }
+          }
+        }
+      },
+      "components": {
+        "schemas": {
+          "Node": {
+            "type": "object",
+            "properties": { "child": { "$ref": "#/components/schemas/Node" } }
+          }
+        }
+      }
+    }
+    """;
 }

@@ -1,4 +1,5 @@
 using LtiIntegrationGateway.Infrastructure.Management;
+using LtiIntegrationGateway.Infrastructure.OpenApi;
 using LtiIntegrationGateway.Infrastructure.Persistence;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
 using LtiIntegrationGateway.Infrastructure.Routing;
@@ -14,6 +15,7 @@ public sealed record ActivateContractVersionResult(int? Version, IReadOnlyList<s
 public sealed class ActivateContractVersionHandler(
     GatewayDbContext db,
     InboundRouteCatalog catalog,
+    InboundSchemaCache schemaCache,
     ManagementAuditWriter audit)
 {
     public async Task<ActivateContractVersionResult> HandleAsync(
@@ -62,7 +64,7 @@ public sealed class ActivateContractVersionHandler(
             catalog.Deactivate(ContractRouteSets.RevisionKey(previous.Id));
         }
 
-        var candidate = ContractRouteSets.Build(version.Id, channelName, version.Operations);
+        var candidate = ContractRouteSets.Build(version.Id, channelName, version.Operations, ContractVersionSettings.From(version));
         var activation = catalog.Activate(candidate);
 
         if (!activation.Succeeded)
@@ -99,6 +101,15 @@ public sealed class ActivateContractVersionHandler(
             throw;
         }
 
+        // Схемы компилируются один раз на ревизию: при деактивации предыдущей версии они удаляются,
+        // при активации новой — собираются (ADR §14).
+        await schemaCache.WarmUpAsync(version.Id, version.Operations, cancellationToken);
+
+        if (previous is not null)
+        {
+            schemaCache.Remove(previous.Id);
+        }
+
         await audit.RecordAsync("ActivateContract", target, true, null, cancellationToken);
 
         return new ActivateContractVersionResult(version.Version, []);
@@ -108,9 +119,10 @@ public sealed class ActivateContractVersionHandler(
     {
         if (previous is not null)
         {
-            catalog.Activate(ContractRouteSets.Build(previous.Id, channelName, previous.Operations));
+            catalog.Activate(ContractRouteSets.Build(previous.Id, channelName, previous.Operations, ContractVersionSettings.From(previous)));
         }
     }
+
 
     private static string Truncate(string value) => value.Length <= 2048 ? value : value[..2048];
 }

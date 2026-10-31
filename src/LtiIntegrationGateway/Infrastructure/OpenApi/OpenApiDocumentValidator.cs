@@ -27,6 +27,169 @@ internal static class OpenApiDocumentValidator
         "get", "put", "post", "delete", "options", "head", "patch", "trace",
     };
 
+    private const int MaxReferenceDepth = 32;
+
+    /// <summary>
+    /// Извлекает схемы тела операций: для каждой операции собирается JSON-объект
+    /// <c>{ "content-type": schema }</c> с развёрнутыми локальными <c>$ref</c>.
+    /// Ключ результата — <c>"METHOD template"</c>.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> ExtractRequestSchemas(
+        JsonObject root,
+        List<string> problems)
+    {
+        var schemas = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        if (root["paths"] is not JsonObject paths)
+        {
+            return schemas;
+        }
+
+        foreach (var path in paths)
+        {
+            if (path.Value is not JsonObject pathItem)
+            {
+                continue;
+            }
+
+            foreach (var member in pathItem)
+            {
+                if (!HttpMethods.Contains(member.Key) || member.Value is not JsonObject operation)
+                {
+                    continue;
+                }
+
+                if (operation["requestBody"] is not JsonObject requestBody ||
+                    requestBody["content"] is not JsonObject content)
+                {
+                    continue;
+                }
+
+                var contentSchemas = new JsonObject();
+
+                foreach (var contentType in content)
+                {
+                    if (contentType.Value is not JsonObject mediaType ||
+                        mediaType["schema"] is not JsonObject schema)
+                    {
+                        continue;
+                    }
+
+                    var inlined = InlineReferences(
+                        schema,
+                        root,
+                        depth: 0,
+                        references: [],
+                        problems,
+                        $"paths.{path.Key}.{member.Key}.requestBody.content.{contentType.Key}.schema");
+
+                    if (inlined is JsonObject inlinedObject)
+                    {
+                        contentSchemas[contentType.Key] = inlinedObject;
+                    }
+                }
+
+                if (contentSchemas.Count > 0)
+                {
+                    schemas[$"{member.Key.ToUpperInvariant()} {path.Key}"] = contentSchemas.ToJsonString();
+                }
+            }
+        }
+
+        return schemas;
+    }
+
+    private static JsonNode? InlineReferences(
+        JsonNode? node,
+        JsonObject root,
+        int depth,
+        HashSet<string> references,
+        List<string> problems,
+        string path)
+    {
+        if (node is null)
+        {
+            return null;
+        }
+
+        if (depth > MaxReferenceDepth)
+        {
+            problems.Add($"schema: превышена глубина вложенности ссылок ({path})");
+
+            return null;
+        }
+
+        switch (node)
+        {
+            case JsonObject jsonObject:
+            {
+                if (jsonObject["$ref"] is JsonValue referenceValue &&
+                    referenceValue.TryGetValue<string>(out var reference) &&
+                    reference.StartsWith("#/", StringComparison.Ordinal))
+                {
+                    if (!references.Add(reference))
+                    {
+                        problems.Add($"schema: циклическая ссылка '{reference}' ({path})");
+
+                        return null;
+                    }
+
+                    var target = ResolvePointer(root, reference);
+
+                    if (target is null)
+                    {
+                        references.Remove(reference);
+                        problems.Add($"ref: '{reference}' не найдена в документе ({path})");
+
+                        return null;
+                    }
+
+                    var inlined = InlineReferences(
+                        target.DeepClone(),
+                        root,
+                        depth + 1,
+                        references,
+                        problems,
+                        $"{path}->{reference}");
+
+                    references.Remove(reference);
+
+                    return inlined;
+                }
+
+                var result = new JsonObject();
+
+                foreach (var property in jsonObject)
+                {
+                    result[property.Key] = InlineReferences(
+                        property.Value?.DeepClone(),
+                        root,
+                        depth,
+                        references,
+                        problems,
+                        $"{path}.{property.Key}");
+                }
+
+                return result;
+            }
+
+            case JsonArray jsonArray:
+            {
+                var result = new JsonArray();
+
+                foreach (var item in jsonArray)
+                {
+                    result.Add(InlineReferences(item?.DeepClone(), root, depth, references, problems, path));
+                }
+
+                return result;
+            }
+
+            default:
+                return node.DeepClone();
+        }
+    }
+
     public static void Validate(JsonObject root, List<string> problems, List<string> warnings)
     {
         Walk(root, "#", root, problems, warnings);

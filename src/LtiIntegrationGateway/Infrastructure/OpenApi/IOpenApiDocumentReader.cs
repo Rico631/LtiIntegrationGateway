@@ -10,10 +10,11 @@ public enum OpenApiSourceFormat
 /// <summary>Операция, извлечённая из документа контракта.</summary>
 public sealed record OpenApiOperationDefinition(string HttpMethod, string Template, string? OperationId);
 
-/// <summary>Результат чтения и проверки документа: операции, проблемы и предупреждения.</summary>
+/// <summary>Результат чтения и проверки документа: операции, схемы тела, проблемы и предупреждения.</summary>
 public sealed record OpenApiReadResult(
     OpenApiSourceFormat Format,
     IReadOnlyList<OpenApiOperationDefinition> Operations,
+    IReadOnlyDictionary<string, string> RequestSchemas,
     IReadOnlyList<string> Problems,
     IReadOnlyList<string> Warnings)
 {
