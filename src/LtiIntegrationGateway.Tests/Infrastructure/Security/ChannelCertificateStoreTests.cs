@@ -299,7 +299,6 @@ public class ChannelCertificateStoreTests
 
         await Assert.That(info.Found).IsTrue();
         await Assert.That(info.Valid).IsFalse();
-        await Assert.That(info.NotYetValid).IsFalse();
         await Assert.That(info.ExpiresAt).IsNotNull();
         await Assert.That(info.Problem!.Contains("истёк", StringComparison.OrdinalIgnoreCase)).IsTrue();
         await Assert.That(info.Problem.Contains(material, StringComparison.Ordinal)).IsFalse();
@@ -325,7 +324,6 @@ public class ChannelCertificateStoreTests
 
         await Assert.That(info.Found).IsTrue();
         await Assert.That(info.Valid).IsFalse();
-        await Assert.That(info.NotYetValid).IsTrue();
         await Assert.That(info.ExpiresAt).IsNotNull();
         await Assert.That(info.Problem!.Contains("ещё не наступил", StringComparison.OrdinalIgnoreCase)).IsTrue();
     }

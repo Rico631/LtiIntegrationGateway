@@ -99,7 +99,7 @@ public sealed class PublishContractVersionHandler(
 
         if (problems.Count > 0)
         {
-            await audit.RecordAsync("PublishContract", target, false, Truncate(string.Join("; ", problems)), cancellationToken);
+            await audit.RecordAsync("PublishContract", target, false, string.Join("; ", problems), cancellationToken);
 
             return new PublishContractVersionResult(version.Version, problems);
         }
@@ -245,5 +245,4 @@ public sealed class PublishContractVersionHandler(
             .Where(group => group.Count() > 1)
             .Select(group => $"operation_id: '{group.Key}' повторяется в документе");
 
-    private static string Truncate(string value) => value.Length <= 2048 ? value : value[..2048];
 }

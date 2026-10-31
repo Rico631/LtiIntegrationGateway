@@ -186,8 +186,7 @@ public sealed partial class ManagementApiService : ManagementService.ManagementS
             operation,
             target,
             succeeded,
-            problems.Count == 0 ? null : Truncate(string.Join("; ", problems)),
+            problems.Count == 0 ? null : string.Join("; ", problems),
             cancellationToken);
 
-    private static string Truncate(string value) => value.Length <= 2048 ? value : value[..2048];
 }

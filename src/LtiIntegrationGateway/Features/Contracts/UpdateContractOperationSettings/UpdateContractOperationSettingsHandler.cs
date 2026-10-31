@@ -228,10 +228,9 @@ public sealed class UpdateContractOperationSettingsHandler(
         string details,
         CancellationToken cancellationToken)
     {
-        await audit.RecordAsync(AuditOperation, target, false, Truncate(details), cancellationToken);
+        await audit.RecordAsync(AuditOperation, target, false, details, cancellationToken);
 
         return new UpdateContractOperationSettingsResult(version, notFound, [details]);
     }
 
-    private static string Truncate(string value) => value.Length <= 2048 ? value : value[..2048];
 }

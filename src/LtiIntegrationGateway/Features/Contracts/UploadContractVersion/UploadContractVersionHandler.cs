@@ -44,7 +44,7 @@ public sealed class UploadContractVersionHandler(
                 "UploadContract",
                 command.ChannelName,
                 false,
-                Truncate(string.Join("; ", read.Problems)),
+                string.Join("; ", read.Problems),
                 cancellationToken);
 
             return new UploadContractVersionResult(null, null, read.Problems, read.Warnings);
@@ -81,6 +81,4 @@ public sealed class UploadContractVersionHandler(
         return new UploadContractVersionResult(nextVersion, read.Format.ToString(), [], read.Warnings);
     }
 
-    private static string Truncate(string value) =>
-        value.Length <= 2048 ? value : value[..2048];
 }

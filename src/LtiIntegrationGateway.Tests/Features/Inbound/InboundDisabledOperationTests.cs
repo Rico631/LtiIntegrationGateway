@@ -85,8 +85,8 @@ public class InboundDisabledOperationTests
 
         var entry = await SingleDisabledOperationAuditAsync(factory);
 
-        await Assert.That(entry.Target.Length).IsEqualTo(InboundDisabledOperationHandler.MaxTargetLength);
-        await Assert.That(entry.Target).IsEqualTo($"{ChannelName}:POST {longPath}"[..InboundDisabledOperationHandler.MaxTargetLength]);
+        await Assert.That(entry.Target.Length).IsEqualTo(ManagementAuditWriter.MaxTargetLength);
+        await Assert.That(entry.Target).IsEqualTo($"{ChannelName}:POST {longPath}"[..ManagementAuditWriter.MaxTargetLength]);
         await Assert.That(entry.Details).IsEqualTo(longPath);
     }
 
@@ -112,7 +112,7 @@ public class InboundDisabledOperationTests
         var entry = await SingleDisabledOperationAuditAsync(factory);
 
         await Assert.That(entry.Target).IsEqualTo($"{ChannelName}:POST {template}");
-        await Assert.That(entry.Details!.Length).IsEqualTo(InboundDisabledOperationHandler.MaxDetailsLength);
+        await Assert.That(entry.Details!.Length).IsEqualTo(ManagementAuditWriter.MaxDetailsLength);
     }
 
     private static async Task<ManagementAuditEntry> SingleDisabledOperationAuditAsync(

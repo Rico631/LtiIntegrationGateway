@@ -83,7 +83,7 @@ public sealed class ActivateContractVersionHandler(
                 "ActivateContract",
                 target,
                 false,
-                Truncate(string.Join("; ", activation.Problems)),
+                string.Join("; ", activation.Problems),
                 cancellationToken);
 
             return new ActivateContractVersionResult(version.Version, activation.Problems);
@@ -137,5 +137,4 @@ public sealed class ActivateContractVersionHandler(
     }
 
 
-    private static string Truncate(string value) => value.Length <= 2048 ? value : value[..2048];
 }

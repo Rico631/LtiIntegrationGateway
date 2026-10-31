@@ -1,6 +1,5 @@
 using LtiIntegrationGateway.Infrastructure.Management;
 using LtiIntegrationGateway.Infrastructure.Routing;
-using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Routing;
 
 namespace LtiIntegrationGateway.Features.Inbound;
@@ -8,7 +7,6 @@ namespace LtiIntegrationGateway.Features.Inbound;
 /// <summary>
 /// Обработчик вызова отключённой операции: тело запроса не читается, аутентификация не выполняется,
 /// обращение фиксируется в аудите, внешняя система получает <c>404</c> без тела (ADR §7.3, §13).
-/// Объект и детали записи аудита усекаются до длин модели.
 /// </summary>
 public sealed class InboundDisabledOperationHandler(
     IServiceScopeFactory scopeFactory,
@@ -17,12 +15,6 @@ public sealed class InboundDisabledOperationHandler(
     /// <summary>Имя операции в аудите: путь известен, но операция отключена.</summary>
     public const string AuditOperation = "InboundOperationDisabled";
 
-    /// <summary>Максимальная длина объекта операции в аудите; совпадает с длиной в модели.</summary>
-    public const int MaxTargetLength = 256;
-
-    /// <summary>Максимальная длина деталей записи аудита; совпадает с длиной в модели.</summary>
-    public const int MaxDetailsLength = 2048;
-
     public async Task HandleAsync(HttpContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -30,7 +22,7 @@ public sealed class InboundDisabledOperationHandler(
         var endpoint = context.GetEndpoint();
         var route = endpoint?.Metadata.GetMetadata<InboundRouteMetadata>();
         var template = (endpoint as RouteEndpoint)?.RoutePattern.RawText ?? string.Empty;
-        var path = RawPath(context);
+        var path = InboundRequestPath.Get(context);
 
         if (route is not null)
         {
@@ -50,9 +42,9 @@ public sealed class InboundDisabledOperationHandler(
 
             await audit.RecordAsync(
                 AuditOperation,
-                Truncate($"{channelName}:{method.ToUpperInvariant()} {template}", MaxTargetLength),
+                $"{channelName}:{method.ToUpperInvariant()} {template}",
                 false,
-                Truncate(path, MaxDetailsLength),
+                path,
                 CancellationToken.None);
         }
         catch (Exception exception)
@@ -65,21 +57,4 @@ public sealed class InboundDisabledOperationHandler(
                 template);
         }
     }
-
-    private static string RawPath(HttpContext context)
-    {
-        var target = context.Features.Get<IHttpRequestFeature>()?.RawTarget;
-
-        if (string.IsNullOrEmpty(target))
-        {
-            return context.Request.Path.Value ?? string.Empty;
-        }
-
-        var queryIndex = target.IndexOf('?', StringComparison.Ordinal);
-
-        return queryIndex < 0 ? target : target[..queryIndex];
-    }
-
-    private static string Truncate(string value, int maxLength) =>
-        value.Length <= maxLength ? value : value[..maxLength];
 }

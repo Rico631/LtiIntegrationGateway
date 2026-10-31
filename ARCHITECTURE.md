@@ -149,6 +149,7 @@ Features/Contracts
 ```text
 Features/Inbound
 ├── InboundRequestHandler          порядок проверок, InboundMessage, журнал, 202/503
+├── InboundRequestPath             фактический путь запроса без query и декодирования
 ├── InboundRequestAuthenticator    none, api_key, basic, client_certificate
 ├── InboundDisabledOperationHandler 404 без чтения тела и аутентификации + аудит InboundOperationDisabled
 ├── InboundMessageLogWriter        запись pending → sent | failed
@@ -196,7 +197,7 @@ Features/Management
 | `OpenApi/OpenApiDocumentValidator` | fail-closed проверки, извлечение операций и схем тела | запрещённые ключевые слова, `$ref`, `format`; инлайнинг `$ref` до глубины 32 |
 | `OpenApi/InboundSchemaCache` | скомпилированные схемы активных ревизий | `NJsonSchema` 11.6.1, компиляция при активации |
 | `Management/ManagementApiKeyMiddleware` | ключ управляющего API | `401`/`503`, gRPC `Unauthenticated` |
-| `Management/ManagementAuditWriter` | аудит управляющих операций | без значений секретов |
+| `Management/ManagementAuditWriter` | аудит управляющих операций | без значений секретов; усечение объекта и деталей до длин модели |
 | `Security/ConfigurationSecretStore` | значение секрета по ключу | только `IConfiguration` |
 | `Security/ConfigurationChannelCertificateStore` | клиентский сертификат по `config_key` | PFX из файла или base64, пароль `<config_key>:Password`, кэш на время жизни процесса |
 | `Http/ChannelHttpClientPool` | пул `SocketsHttpHandler` по ключу канала | TLS 1.2+, без редиректов, проверка серверного сертификата, срок жизни соединения 5 минут |

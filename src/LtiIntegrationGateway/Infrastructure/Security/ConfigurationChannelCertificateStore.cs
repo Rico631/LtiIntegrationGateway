@@ -240,14 +240,12 @@ public sealed class ConfigurationChannelCertificateStore(
         var notBefore = certificate.NotBefore.ToUniversalTime();
         var notAfter = certificate.NotAfter.ToUniversalTime();
         var expiresAt = new DateTimeOffset(notAfter, TimeSpan.Zero);
-        var notYetValid = notBefore > now;
 
         if (!certificate.HasPrivateKey)
         {
             return ChannelCertificateInfo.Parsed(
                 expiresAt,
                 false,
-                notYetValid,
                 "у сертификата нет приватного ключа");
         }
 
@@ -256,16 +254,14 @@ public sealed class ConfigurationChannelCertificateStore(
             return ChannelCertificateInfo.Parsed(
                 expiresAt,
                 false,
-                false,
                 "срок действия сертификата истёк");
         }
 
-        return notYetValid
+        return notBefore > now
             ? ChannelCertificateInfo.Parsed(
                 expiresAt,
                 false,
-                true,
                 "срок действия сертификата ещё не наступил")
-            : ChannelCertificateInfo.Parsed(expiresAt, true, false, problem: null);
+            : ChannelCertificateInfo.Parsed(expiresAt, true, problem: null);
     }
 }

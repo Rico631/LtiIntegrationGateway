@@ -6,7 +6,6 @@ using LtiIntegrationGateway.Contracts.Messages.V1;
 using LtiIntegrationGateway.Infrastructure.OpenApi;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
 using LtiIntegrationGateway.Infrastructure.Routing;
-using Microsoft.AspNetCore.Http.Features;
 
 namespace LtiIntegrationGateway.Features.Inbound;
 
@@ -35,7 +34,7 @@ public sealed class InboundRequestHandler(
 
         if (route is null)
         {
-            logger.LogError("Динамический входящий маршрут без метаданных: {Path}", RawPath(context));
+            logger.LogError("Динамический входящий маршрут без метаданных: {Path}", InboundRequestPath.Get(context));
 
             await WriteStatusAsync(context, StatusCodes.Status500InternalServerError);
 
@@ -155,7 +154,7 @@ public sealed class InboundRequestHandler(
             MessageId = Guid.NewGuid().ToString("N"),
             ChannelName = route.ChannelName,
             HttpMethod = context.Request.Method,
-            RelativePath = RawPath(context),
+            RelativePath = InboundRequestPath.Get(context),
             RouteTemplate = template,
             ContentType = contentType ?? string.Empty,
             Body = Google.Protobuf.ByteString.CopyFrom(body),
@@ -240,7 +239,7 @@ public sealed class InboundRequestHandler(
         HttpContext? context = null)
     {
         var method = message?.HttpMethod ?? context?.Request.Method ?? string.Empty;
-        var path = message?.RelativePath ?? RawPath(context!);
+        var path = message?.RelativePath ?? InboundRequestPath.Get(context!);
 
         return new InboundMessageLog
         {
@@ -322,19 +321,5 @@ public sealed class InboundRequestHandler(
         context.Response.StatusCode = statusCode;
 
         return Task.CompletedTask;
-    }
-
-    private static string RawPath(HttpContext context)
-    {
-        var target = context.Features.Get<IHttpRequestFeature>()?.RawTarget;
-
-        if (string.IsNullOrEmpty(target))
-        {
-            return context.Request.Path.Value ?? string.Empty;
-        }
-
-        var queryIndex = target.IndexOf('?', StringComparison.Ordinal);
-
-        return queryIndex < 0 ? target : target[..queryIndex];
     }
 }

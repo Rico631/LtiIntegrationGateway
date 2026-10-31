@@ -55,13 +55,11 @@ public sealed record ChannelCertificateInfo
         bool found,
         DateTimeOffset? expiresAt,
         bool valid,
-        bool notYetValid,
         string? problem)
     {
         Found = found;
         ExpiresAt = expiresAt;
         Valid = valid;
-        NotYetValid = notYetValid;
         Problem = problem;
     }
 
@@ -74,9 +72,6 @@ public sealed record ChannelCertificateInfo
     /// <summary>Признак пригодности к использованию: материал разобран, есть приватный ключ, срок идёт.</summary>
     public bool Valid { get; }
 
-    /// <summary>Признак того, что срок действия сертификата ещё не наступил.</summary>
-    public bool NotYetValid { get; }
-
     /// <summary>Причина непригодности без значения материала и пароля; <c>null</c> для валидного сертификата.</summary>
     public string? Problem { get; }
 
@@ -85,16 +80,15 @@ public sealed record ChannelCertificateInfo
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(problem);
 
-        return new ChannelCertificateInfo(false, null, false, false, problem);
+        return new ChannelCertificateInfo(false, null, false, problem);
     }
 
     /// <summary>Материал разобран: срок известен, валидность и причина рассчитаны.</summary>
     public static ChannelCertificateInfo Parsed(
         DateTimeOffset expiresAt,
         bool valid,
-        bool notYetValid,
         string? problem) =>
-        new(true, expiresAt, valid, notYetValid, problem);
+        new(true, expiresAt, valid, problem);
 }
 
 /// <summary>Источник клиентских сертификатов исходящих каналов по ключу конфигурации ревизии.</summary>

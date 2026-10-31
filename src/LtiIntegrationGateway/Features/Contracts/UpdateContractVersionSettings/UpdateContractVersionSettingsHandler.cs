@@ -47,7 +47,7 @@ public sealed class UpdateContractVersionSettingsHandler(GatewayDbContext db, Ma
 
         if (problems.Count > 0)
         {
-            await audit.RecordAsync("UpdateContractSettings", target, false, Truncate(string.Join("; ", problems)), cancellationToken);
+            await audit.RecordAsync("UpdateContractSettings", target, false, string.Join("; ", problems), cancellationToken);
 
             return new UpdateContractVersionSettingsResult(version.Version, problems);
         }
@@ -104,6 +104,4 @@ public sealed class UpdateContractVersionSettingsHandler(GatewayDbContext db, Ma
     }
 
     private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    private static string Truncate(string value) => value.Length <= 2048 ? value : value[..2048];
 }
