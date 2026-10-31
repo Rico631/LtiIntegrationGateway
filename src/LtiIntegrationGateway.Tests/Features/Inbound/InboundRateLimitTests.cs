@@ -130,7 +130,7 @@ public class InboundRateLimitTests
     }
 
     [Test]
-    public async Task Operation_quota_overrides_version_quota()
+    public async Task Operations_share_channel_quota()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage();
 
@@ -142,7 +142,7 @@ public class InboundRateLimitTests
             null,
             null,
             null,
-            RateLimitPermit: 100,
+            RateLimitPermit: 1,
             RateLimitWindowSeconds: 60);
 
         var operations = new[]
@@ -154,8 +154,6 @@ public class InboundRateLimitTests
                 HttpMethod = "GET",
                 Template = "/callbacks/limited",
                 OperationId = "limited",
-                RateLimitPermit = 1,
-                RateLimitWindowSeconds = 60,
             },
             new ContractOperation
             {
@@ -178,12 +176,8 @@ public class InboundRateLimitTests
 
         await Assert.That((await client.GetAsync("/callbacks/limited")).StatusCode)
             .IsEqualTo(HttpStatusCode.Accepted);
-        await Assert.That((await client.GetAsync("/callbacks/limited")).StatusCode)
-            .IsEqualTo(HttpStatusCode.TooManyRequests);
-
-        // Маршрут без переопределения использует квоту версии, а не квоту соседней операции.
         await Assert.That((await client.GetAsync("/callbacks/open")).StatusCode)
-            .IsEqualTo(HttpStatusCode.Accepted);
+            .IsEqualTo(HttpStatusCode.TooManyRequests);
     }
 
     [Test]
@@ -212,8 +206,6 @@ public class InboundRateLimitTests
                     Template = "/callbacks/operation",
                     OperationId = "operation",
                     RecipientQueue = "other.inbox",
-                    RateLimitPermit = 5,
-                    RateLimitWindowSeconds = 20,
                 },
             ],
             versionSettings,
@@ -227,8 +219,8 @@ public class InboundRateLimitTests
         await Assert.That(metadata).IsNotNull();
         await Assert.That(metadata!.ChannelName).IsEqualTo("bank-a");
         await Assert.That(metadata.RecipientQueue).IsEqualTo("other.inbox");
-        await Assert.That(metadata.RateLimitPermit).IsEqualTo(5);
-        await Assert.That(metadata.RateLimitWindowSeconds).IsEqualTo(20);
+        await Assert.That(metadata.RateLimitPermit).IsEqualTo(100);
+        await Assert.That(metadata.RateLimitWindowSeconds).IsEqualTo(60);
         await Assert.That(metadata.AuthType).IsEqualTo(ChannelAuthType.ApiKey);
     }
 }

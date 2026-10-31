@@ -96,6 +96,7 @@ public sealed class OutboundOperationRecorder(GatewayDbContext db)
         string? deliveryAddress,
         int? channelRevisionNumber,
         OutboundHttpOutcome outcome,
+        OutboundDeliveryStatus deliveryStatus = OutboundDeliveryStatus.Pending,
         CancellationToken cancellationToken = default)
     {
         var completedAt = DateTimeOffset.UtcNow;
@@ -128,9 +129,8 @@ public sealed class OutboundOperationRecorder(GatewayDbContext db)
             ErrorMessage = outcome.ErrorMessage,
             ChannelRevisionNumber = channelRevisionNumber,
             AttemptCount = outcome.AttemptCount,
-            DeliveryStatus = OutboundDeliveryStatus.Pending,
+            DeliveryStatus = deliveryStatus,
             CreatedAt = completedAt,
-            CreatedAtUnixMs = completedAt.ToUnixTimeMilliseconds(),
         };
 
         db.OutboundMessageLogs.Add(log);

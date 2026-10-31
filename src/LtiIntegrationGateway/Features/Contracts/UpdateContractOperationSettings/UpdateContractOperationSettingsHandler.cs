@@ -14,16 +14,12 @@ namespace LtiIntegrationGateway.Features.Contracts;
 /// </summary>
 public sealed record ContractOperationSettingsPatch(
     bool? Enabled,
-    string? RecipientQueue,
-    int? RateLimitPermit,
-    int? RateLimitWindowSeconds)
+    string? RecipientQueue)
 {
     /// <summary>Признак отсутствия изменений: ни одно поле не передано.</summary>
     public bool IsEmpty =>
         Enabled is null &&
-        RecipientQueue is null &&
-        RateLimitPermit is null &&
-        RateLimitWindowSeconds is null;
+        RecipientQueue is null;
 }
 
 /// <summary>Изменение настроек операции версии контракта.</summary>
@@ -120,7 +116,7 @@ public sealed class UpdateContractOperationSettingsHandler(
             return await RejectAsync(target, version.Version, false, string.Join("; ", problems), cancellationToken);
         }
 
-        var original = (operation.Enabled, operation.RecipientQueue, operation.RateLimitPermit, operation.RateLimitWindowSeconds);
+        var original = (operation.Enabled, operation.RecipientQueue);
         var previousSet = version.Status == ContractVersionStatus.Active ? BuildSet(version) : null;
 
         Apply(operation, command.Settings);
@@ -132,7 +128,7 @@ public sealed class UpdateContractOperationSettingsHandler(
             if (!activation.Succeeded)
             {
                 // Каталог не принял набор: прежний набор остаётся активным, база не меняется.
-                (operation.Enabled, operation.RecipientQueue, operation.RateLimitPermit, operation.RateLimitWindowSeconds) = original;
+                (operation.Enabled, operation.RecipientQueue) = original;
 
                 return await RejectAsync(
                     target,
@@ -180,11 +176,6 @@ public sealed class UpdateContractOperationSettingsHandler(
             problems.Add("queue: очередь операции должна иметь формат <product_id>.inbox");
         }
 
-        if (settings.RateLimitPermit is <= 0 || settings.RateLimitWindowSeconds is <= 0)
-        {
-            problems.Add("rate_limit: квота и окно задаются положительными значениями");
-        }
-
         return problems;
     }
 
@@ -200,16 +191,6 @@ public sealed class UpdateContractOperationSettingsHandler(
             operation.RecipientQueue = string.IsNullOrWhiteSpace(settings.RecipientQueue)
                 ? null
                 : settings.RecipientQueue.Trim();
-        }
-
-        if (settings.RateLimitPermit is { } permit)
-        {
-            operation.RateLimitPermit = permit;
-        }
-
-        if (settings.RateLimitWindowSeconds is { } window)
-        {
-            operation.RateLimitWindowSeconds = window;
         }
     }
 

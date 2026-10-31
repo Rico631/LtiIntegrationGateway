@@ -284,7 +284,7 @@ public class OutboundResultReplayTests
 
         await Assert.That(log.DeliveryAddress).IsEqualTo(OutboundFixture.ProductInbox);
         await Assert.That(log.ChannelRevisionNumber).IsEqualTo(1);
-        await Assert.That(log.CreatedAtUnixMs).IsGreaterThan(0);
+        await Assert.That(log.CreatedAt).IsGreaterThan(DateTimeOffset.MinValue);
         await Assert.That(operation.CorrelationId).IsEqualTo("corr-journal");
     }
 }

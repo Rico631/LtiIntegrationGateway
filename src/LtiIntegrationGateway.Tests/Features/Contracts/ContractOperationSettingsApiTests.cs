@@ -46,17 +46,13 @@ public class ContractOperationSettingsApiTests
         await Assert.That(before.Operations[0].OperationId).IsEqualTo("receiveContract");
         await Assert.That(before.Operations[0].Enabled).IsTrue();
         await Assert.That(before.Operations[0].RecipientQueue).IsEmpty();
-        await Assert.That(before.Operations[0].RateLimitPermit).IsEqualTo(0);
-        await Assert.That(before.Operations[0].RateLimitWindowSeconds).IsEqualTo(0);
 
         var update = await PatchAsync(
             grpc,
             1,
             "receiveContract",
             enabled: false,
-            recipientQueue: OperationQueue,
-            rateLimitPermit: 5,
-            rateLimitWindowSeconds: 20);
+            recipientQueue: OperationQueue);
 
         await Assert.That(update.Succeeded).IsTrue();
 
@@ -64,8 +60,6 @@ public class ContractOperationSettingsApiTests
 
         await Assert.That(after.Operations[0].Enabled).IsFalse();
         await Assert.That(after.Operations[0].RecipientQueue).IsEqualTo(OperationQueue);
-        await Assert.That(after.Operations[0].RateLimitPermit).IsEqualTo(5);
-        await Assert.That(after.Operations[0].RateLimitWindowSeconds).IsEqualTo(20);
 
         var version = await grpc.GetContractVersionAsync(
             new GetContractVersionRequest { ChannelName = ChannelName, Version = 1 },
@@ -73,7 +67,6 @@ public class ContractOperationSettingsApiTests
 
         await Assert.That(version.Operations[0].Enabled).IsFalse();
         await Assert.That(version.Operations[0].RecipientQueue).IsEqualTo(OperationQueue);
-        await Assert.That(version.Operations[0].RateLimitPermit).IsEqualTo(5);
     }
 
     [Test]
@@ -88,7 +81,7 @@ public class ContractOperationSettingsApiTests
             $"/v1/channels/{ChannelName}/contracts/1/operations/receiveContract",
             ManagementApi.Json(
                 $$"""
-                { "enabled": false, "recipientQueue": "{{OperationQueue}}", "rateLimitPermit": 5, "rateLimitWindowSeconds": 20 }
+                { "enabled": false, "recipientQueue": "{{OperationQueue}}" }
                 """));
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
@@ -108,8 +101,6 @@ public class ContractOperationSettingsApiTests
 
             await Assert.That(operation.GetProperty("enabled").GetBoolean()).IsFalse();
             await Assert.That(operation.GetProperty("recipientQueue").GetString()).IsEqualTo(OperationQueue);
-            await Assert.That(operation.GetProperty("rateLimitPermit").GetInt32()).IsEqualTo(5);
-            await Assert.That(operation.GetProperty("rateLimitWindowSeconds").GetInt32()).IsEqualTo(20);
         }
     }
 
@@ -124,9 +115,7 @@ public class ContractOperationSettingsApiTests
             grpc,
             1,
             "receiveContract",
-            recipientQueue: OperationQueue,
-            rateLimitPermit: 5,
-            rateLimitWindowSeconds: 20);
+            recipientQueue: OperationQueue);
 
         await Assert.That(first.Succeeded).IsTrue();
 
@@ -138,8 +127,6 @@ public class ContractOperationSettingsApiTests
 
         await Assert.That(after.Operations[0].Enabled).IsFalse();
         await Assert.That(after.Operations[0].RecipientQueue).IsEqualTo(OperationQueue);
-        await Assert.That(after.Operations[0].RateLimitPermit).IsEqualTo(5);
-        await Assert.That(after.Operations[0].RateLimitWindowSeconds).IsEqualTo(20);
 
         var cleared = await PatchAsync(grpc, 1, "receiveContract", recipientQueue: "");
 
@@ -148,7 +135,6 @@ public class ContractOperationSettingsApiTests
         var afterClear = await ReadOperationsAsync(grpc, 1);
 
         await Assert.That(afterClear.Operations[0].RecipientQueue).IsEmpty();
-        await Assert.That(afterClear.Operations[0].RateLimitPermit).IsEqualTo(5);
     }
 
     [Test]
@@ -273,25 +259,6 @@ public class ContractOperationSettingsApiTests
         var afterAcceptance = await ReadOperationsAsync(grpc, 1);
 
         await Assert.That(afterAcceptance.Operations[0].RecipientQueue).IsEqualTo("dpv.inbox");
-    }
-
-    [Test]
-    public async Task Non_positive_rate_limit_returns_rate_limit_problem()
-    {
-        using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = await PreparePublishedAsync(factory, channel);
-
-        var zeroPermit = await PatchAsync(grpc, 1, "receiveContract", rateLimitPermit: 0);
-        var negativeWindow = await PatchAsync(grpc, 1, "receiveContract", rateLimitWindowSeconds: -1);
-
-        await Assert.That(zeroPermit.Problems.Any(problem => problem.Code == "rate_limit")).IsTrue();
-        await Assert.That(negativeWindow.Problems.Any(problem => problem.Code == "rate_limit")).IsTrue();
-
-        var after = await ReadOperationsAsync(grpc, 1);
-
-        await Assert.That(after.Operations[0].RateLimitPermit).IsEqualTo(0);
-        await Assert.That(after.Operations[0].RateLimitWindowSeconds).IsEqualTo(0);
     }
 
     [Test]

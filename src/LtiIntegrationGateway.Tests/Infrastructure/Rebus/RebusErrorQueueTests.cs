@@ -1,4 +1,5 @@
 using LtiIntegrationGateway.Contracts.Messages.V1;
+using LtiIntegrationGateway.Features.Outbound;
 using LtiIntegrationGateway.Infrastructure.Rebus;
 using Rebus.Activation;
 using Rebus.Config;
@@ -41,6 +42,30 @@ public class RebusErrorQueueTests
             RelativePath = "/api/contracts",
             HttpMethod = "GET",
         });
+
+        var count = await WaitForQueueAsync(network, QueueNames.ErrorQueue, DeliveryTimeout);
+
+        await Assert.That(count).IsEqualTo(1);
+        await Assert.That(network.HasQueue($"{QueueNames.OutboundQueue}.error")).IsFalse();
+    }
+
+    [Test]
+    public async Task Invalid_outbound_request_lands_in_error_queue_without_retries()
+    {
+        var network = new InMemNetwork();
+        var activator = new BuiltinHandlerActivator();
+
+        activator.Register(() => new OutboundRequestHandler(null!));
+
+        var serializer = new ProtobufSerializer(new ProtobufMessageRegistry());
+
+        using var bus = Configure.With(activator)
+            .Transport(transport => transport.UseInMemoryTransport(network, QueueNames.OutboundQueue))
+            .Options(RebusConfigurationExtensions.ConfigureRetryStrategy)
+            .Serialization(serialization => serialization.Register(_ => serializer))
+            .Start();
+
+        await bus.SendLocal(new OutboundRequest());
 
         var count = await WaitForQueueAsync(network, QueueNames.ErrorQueue, DeliveryTimeout);
 

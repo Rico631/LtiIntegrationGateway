@@ -181,7 +181,7 @@ public sealed class GetChannelHealthHandler(
         var outbound = await db.OutboundMessageLogs
             .AsNoTracking()
             .Where(log => log.ChannelName == channelName && log.ErrorCode != null)
-            .OrderByDescending(log => log.CreatedAtUnixMs)
+            .OrderByDescending(log => log.CreatedAt)
             .Select(log => new
             {
                 log.ErrorCode,
@@ -195,7 +195,7 @@ public sealed class GetChannelHealthHandler(
         var inbound = await db.InboundMessageLogs
             .AsNoTracking()
             .Where(log => log.ChannelName == channelName && log.ErrorCode != null)
-            .OrderByDescending(log => log.ReceivedAtUnixMs)
+            .OrderByDescending(log => log.ReceivedAt)
             .Select(log => new
             {
                 log.ErrorCode,

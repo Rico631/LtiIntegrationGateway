@@ -4,9 +4,9 @@ using LtiIntegrationGateway.Infrastructure.Routing;
 namespace LtiIntegrationGateway.Features.Contracts;
 
 /// <summary>
-/// Действующие настройки операции контракта: очередь получателя и квота частоты операции
-/// переопределяют настройки версии, квота и окно версии — общие настройки приложения.
-/// Авторизация операцией не переопределяется и всегда берётся из версии (ADR §7.3, §13).
+/// Действующие настройки операции контракта: включённость и очередь получателя операции
+/// переопределяют настройки версии; квота частоты задаётся только версией и общими настройками
+/// приложения. Авторизация операцией не переопределяется и всегда берётся из версии (ADR §7.3, §13).
 /// </summary>
 public sealed record ContractOperationSettings(
     bool Enabled,
@@ -42,8 +42,8 @@ public sealed record ContractOperationSettings(
         return new ContractOperationSettings(
             operation.Enabled,
             ResolveRecipientQueue(operation, version),
-            operation.RateLimitPermit ?? version.RateLimitPermit ?? applicationDefaults.PermitLimit,
-            operation.RateLimitWindowSeconds ?? version.RateLimitWindowSeconds ?? applicationDefaults.WindowSeconds);
+            version.RateLimitPermit ?? applicationDefaults.PermitLimit,
+            version.RateLimitWindowSeconds ?? applicationDefaults.WindowSeconds);
     }
 
     private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

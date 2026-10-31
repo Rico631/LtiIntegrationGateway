@@ -92,14 +92,14 @@ public sealed class OutboundResultDispatcher : BackgroundService
         var resultFactory = scope.ServiceProvider.GetRequiredService<StoredOutboundResultFactory>();
         var publisher = scope.ServiceProvider.GetRequiredService<PublishOutboundResultHandler>();
 
-        // Порядок обеспечивается колонкой CreatedAtUnixMs (SQLite не умеет ORDER BY по DateTimeOffset).
+        // Порядок обеспечивается колонкой CreatedAt: EF хранит DateTimeOffset как миллисекунды Unix.
         // Записи без адреса доставки и без операции не участвуют в выборке: они не могут быть
         // доставлены и не должны занимать пачку, иначе доставляемые записи голодают.
         var batch = await db.OutboundMessageLogs
             .Where(log => log.DeliveryStatus == OutboundDeliveryStatus.Pending &&
                           log.DeliveryAddress != string.Empty &&
                           db.OutboundOperations.Any(operation => operation.MessageId == log.MessageId))
-            .OrderBy(log => log.CreatedAtUnixMs)
+            .OrderBy(log => log.CreatedAt)
             .Take(_options.BatchSize)
             .ToListAsync(cancellationToken);
 

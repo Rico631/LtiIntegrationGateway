@@ -20,13 +20,21 @@ public sealed class GatewayWebApplicationFactory : WebApplicationFactory<Program
 
     private GatewayWebApplicationFactory(
         bool supplyConnectionString,
-        IReadOnlyDictionary<string, string?>? extraSettings = null)
+        IReadOnlyDictionary<string, string?>? extraSettings = null,
+        string? connectionString = null)
     {
         _supplyConnectionString = supplyConnectionString;
         _extraSettings = extraSettings ?? new Dictionary<string, string?>();
 
         if (!supplyConnectionString)
         {
+            return;
+        }
+
+        if (connectionString is not null)
+        {
+            _connectionString = connectionString;
+
             return;
         }
 
@@ -39,6 +47,12 @@ public sealed class GatewayWebApplicationFactory : WebApplicationFactory<Program
 
     public static GatewayWebApplicationFactory WithStorage(IReadOnlyDictionary<string, string?>? settings = null) =>
         new(true, settings);
+
+    /// <summary>Хост поверх заранее подготовленной базы: нужен для проверки fail-fast при старте.</summary>
+    public static GatewayWebApplicationFactory WithExistingStorage(
+        string connectionString,
+        IReadOnlyDictionary<string, string?>? settings = null) =>
+        new(true, settings, connectionString);
 
     public static GatewayWebApplicationFactory WithoutStorage() => new(false);
 

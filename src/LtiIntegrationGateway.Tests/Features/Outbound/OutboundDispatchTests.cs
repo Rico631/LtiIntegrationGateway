@@ -4,6 +4,7 @@ using LtiIntegrationGateway.Features.Outbound;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
 using LtiIntegrationGateway.Tests.TestSupport;
 using Microsoft.EntityFrameworkCore;
+using Rebus.Exceptions;
 
 namespace LtiIntegrationGateway.Tests.Features.Outbound;
 
@@ -41,6 +42,25 @@ public class OutboundDispatchTests
     }
 
     [Test]
+    public async Task Invalid_dto_is_rejected_by_handler_without_side_effects()
+    {
+        await using var fixture = new OutboundFixture();
+        await fixture.CreateActiveChannelAsync();
+        await fixture.RegisterProductAsync();
+
+        using var db = fixture.CreateDb();
+        var request = OutboundFixture.CreateRequest();
+        request.MessageId = string.Empty;
+
+        var handler = new OutboundRequestHandler(fixture.CreateProcessor(db));
+
+        await Assert.ThrowsAsync<FailFastException>(() => handler.Handle(request));
+        await Assert.That(fixture.Http.CallCount).IsEqualTo(0);
+        await Assert.That(await db.OutboundOperations.CountAsync()).IsEqualTo(0);
+        await Assert.That(await db.OutboundMessageLogs.CountAsync()).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task Unknown_product_is_refused_without_http_call()
     {
         await using var fixture = new OutboundFixture();
@@ -54,11 +74,15 @@ public class OutboundDispatchTests
         await fixture.CreateProcessor(db).HandleAsync(Command(request));
 
         await Assert.That(fixture.Http.CallCount).IsEqualTo(0);
+        await Assert.That(fixture.Results.Results.Count).IsEqualTo(0);
 
-        var delivered = await fixture.Results.WaitForSingleAsync(DeliveryTimeout);
+        using var verifyDb = fixture.CreateDb();
+        var log = await verifyDb.OutboundMessageLogs.SingleAsync();
 
-        await Assert.That(delivered.Outcome).IsEqualTo(Outcome.GatewayRefused);
-        await Assert.That(delivered.ErrorCode).IsEqualTo(OutboundErrorCodes.ProductNotAllowed);
+        await Assert.That(log.Outcome).IsEqualTo(OutcomeNames.GatewayRefused);
+        await Assert.That(log.ErrorCode).IsEqualTo(OutboundErrorCodes.ProductNotAllowed);
+        await Assert.That(log.DeliveryStatus).IsEqualTo(OutboundDeliveryStatus.Undeliverable);
+        await Assert.That(log.DeliveryAddress).IsEmpty();
     }
 
     [Test]
@@ -72,10 +96,13 @@ public class OutboundDispatchTests
         await fixture.CreateProcessor(db).HandleAsync(Command(senderAddress: "another.inbox"));
 
         await Assert.That(fixture.Http.CallCount).IsEqualTo(0);
+        await Assert.That(fixture.Results.Results.Count).IsEqualTo(0);
 
-        var delivered = await fixture.Results.WaitForSingleAsync(DeliveryTimeout);
+        using var verifyDb = fixture.CreateDb();
+        var log = await verifyDb.OutboundMessageLogs.SingleAsync();
 
-        await Assert.That(delivered.ErrorCode).IsEqualTo(OutboundErrorCodes.ProductNotAllowed);
+        await Assert.That(log.ErrorCode).IsEqualTo(OutboundErrorCodes.ProductNotAllowed);
+        await Assert.That(log.DeliveryStatus).IsEqualTo(OutboundDeliveryStatus.Undeliverable);
     }
 
     [Test]
@@ -98,10 +125,13 @@ public class OutboundDispatchTests
         }
 
         await Assert.That(fixture.Http.CallCount).IsEqualTo(0);
-        await Assert.That(bus.Sent.Count).IsEqualTo(1);
-        await Assert.That(((OutboundResult)bus.Sent[0].Message).ErrorCode)
-            .IsEqualTo(OutboundErrorCodes.ProductNotAllowed);
-        await Assert.That(((OutboundResult)bus.Sent[0].Message).Outcome).IsEqualTo(Outcome.GatewayRefused);
+        await Assert.That(bus.Sent.Count).IsEqualTo(0);
+
+        using var verifyDb = fixture.CreateDb();
+        var log = await verifyDb.OutboundMessageLogs.SingleAsync();
+
+        await Assert.That(log.ErrorCode).IsEqualTo(OutboundErrorCodes.ProductNotAllowed);
+        await Assert.That(log.DeliveryStatus).IsEqualTo(OutboundDeliveryStatus.Undeliverable);
     }
 
     [Test]
@@ -123,10 +153,13 @@ public class OutboundDispatchTests
         await fixture.CreateProcessor(processingDb).HandleAsync(Command());
 
         await Assert.That(fixture.Http.CallCount).IsEqualTo(0);
+        await Assert.That(fixture.Results.Results.Count).IsEqualTo(0);
 
-        var delivered = await fixture.Results.WaitForSingleAsync(DeliveryTimeout);
+        using var verifyDb = fixture.CreateDb();
+        var log = await verifyDb.OutboundMessageLogs.SingleAsync();
 
-        await Assert.That(delivered.ErrorCode).IsEqualTo(OutboundErrorCodes.ChannelNotAllowed);
+        await Assert.That(log.ErrorCode).IsEqualTo(OutboundErrorCodes.ChannelNotAllowed);
+        await Assert.That(log.DeliveryStatus).IsEqualTo(OutboundDeliveryStatus.Undeliverable);
     }
 
     [Test]
@@ -267,7 +300,7 @@ public class OutboundDispatchTests
         await Assert.That(log.Outcome).IsEqualTo(OutcomeNames.HttpResponse);
         await Assert.That(log.DeliveryStatus).IsEqualTo(OutboundDeliveryStatus.Sent);
         await Assert.That(log.ChannelRevisionNumber).IsEqualTo(1);
-        await Assert.That(log.CreatedAtUnixMs).IsGreaterThan(0);
+        await Assert.That(log.CreatedAt).IsGreaterThan(DateTimeOffset.MinValue);
 
         var operation = await verifyDb.OutboundOperations.SingleAsync();
 

@@ -115,7 +115,8 @@ public sealed partial class ManagementApiService(
         bool succeeded,
         IReadOnlyList<string> problems,
         Guid? channelId = null,
-        int? revision = null)
+        int? revision = null,
+        IReadOnlyList<string>? warnings = null)
     {
         var response = new ChannelOperationResponse
         {
@@ -125,6 +126,7 @@ public sealed partial class ManagementApiService(
         };
 
         response.Problems.AddRange(problems.Select(ToProblem));
+        response.Problems.AddRange((warnings ?? []).Select(ToWarning));
 
         return response;
     }
@@ -141,13 +143,25 @@ public sealed partial class ManagementApiService(
     {
         var separator = problem.IndexOf(':');
 
-        return separator < 0
+        var result = separator < 0
             ? new OperationProblem { Code = "problem", Message = problem }
             : new OperationProblem
             {
                 Code = problem[..separator].Trim(),
                 Message = problem[(separator + 1)..].Trim(),
             };
+
+        result.Severity = ProblemSeverity.Error;
+
+        return result;
+    }
+
+    private static OperationProblem ToWarning(string problem)
+    {
+        var result = ToProblem(problem);
+        result.Severity = ProblemSeverity.Warning;
+
+        return result;
     }
 
     private Task AuditAsync(

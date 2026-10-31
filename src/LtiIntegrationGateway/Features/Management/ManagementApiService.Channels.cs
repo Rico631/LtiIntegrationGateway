@@ -1,5 +1,6 @@
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
+using LtiIntegrationGateway.Contracts;
 using LtiIntegrationGateway.Contracts.Management.V1;
 using LtiIntegrationGateway.Features.Channels;
 
@@ -12,6 +13,15 @@ public sealed partial class ManagementApiService
         CreateChannelRequest request,
         ServerCallContext context)
     {
+        var problems = MessageContractValidator.ValidateCreateChannel(request.Name, request.Settings);
+
+        if (problems.Count > 0)
+        {
+            await AuditAsync("CreateChannel", request.Name, false, problems, context.CancellationToken);
+
+            return ToChannelResponse(false, problems);
+        }
+
         var configuration = ChannelMapping.ToConfiguration(request.Settings, out var mappingProblems);
 
         if (mappingProblems.Count > 0)
@@ -36,7 +46,25 @@ public sealed partial class ManagementApiService
         UpdateChannelDraftRequest request,
         ServerCallContext context)
     {
+        var nameProblems = MessageContractValidator.ValidateRollbackChannelRevision(request.ChannelName);
+
+        if (nameProblems.Count > 0)
+        {
+            await AuditAsync("UpdateChannelDraft", request.ChannelName, false, nameProblems, context.CancellationToken);
+
+            return ToChannelResponse(false, nameProblems);
+        }
+
         var channelId = await RequireChannelIdAsync("UpdateChannelDraft", request.ChannelName, context.CancellationToken);
+        var problems = MessageContractValidator.ValidateUpdateChannelDraft(request.ChannelName, request.Settings);
+
+        if (problems.Count > 0)
+        {
+            await AuditAsync("UpdateChannelDraft", request.ChannelName, false, problems, context.CancellationToken);
+
+            return ToChannelResponse(false, problems, channelId);
+        }
+
         var configuration = ChannelMapping.ToConfiguration(request.Settings, out var mappingProblems);
 
         if (mappingProblems.Count > 0)
@@ -61,6 +89,15 @@ public sealed partial class ManagementApiService
         PublishChannelRevisionRequest request,
         ServerCallContext context)
     {
+        var problems = MessageContractValidator.ValidateChannelRevisionCommand(request.ChannelName, request.Revision);
+
+        if (problems.Count > 0)
+        {
+            await AuditAsync("PublishChannelRevision", request.ChannelName, false, problems, context.CancellationToken);
+
+            return ToChannelResponse(false, problems);
+        }
+
         var channelId = await RequireChannelIdAsync("PublishChannelRevision", request.ChannelName, context.CancellationToken);
 
         var result = await publishChannelRevision.HandleAsync(
@@ -71,13 +108,22 @@ public sealed partial class ManagementApiService
 
         await AuditAsync("PublishChannelRevision", request.ChannelName, succeeded, result.Problems, context.CancellationToken);
 
-        return ToChannelResponse(succeeded, result.Problems, channelId, result.RevisionNumber);
+        return ToChannelResponse(succeeded, result.Problems, channelId, result.RevisionNumber, result.Warnings);
     }
 
     public override async Task<ChannelOperationResponse> ActivateChannelRevision(
         ActivateChannelRevisionRequest request,
         ServerCallContext context)
     {
+        var problems = MessageContractValidator.ValidateChannelRevisionCommand(request.ChannelName, request.Revision);
+
+        if (problems.Count > 0)
+        {
+            await AuditAsync("ActivateChannelRevision", request.ChannelName, false, problems, context.CancellationToken);
+
+            return ToChannelResponse(false, problems);
+        }
+
         var channelId = await RequireChannelIdAsync("ActivateChannelRevision", request.ChannelName, context.CancellationToken);
 
         var result = await activateChannelRevision.HandleAsync(
@@ -95,6 +141,15 @@ public sealed partial class ManagementApiService
         RollbackChannelRevisionRequest request,
         ServerCallContext context)
     {
+        var problems = MessageContractValidator.ValidateRollbackChannelRevision(request.ChannelName);
+
+        if (problems.Count > 0)
+        {
+            await AuditAsync("RollbackChannelRevision", request.ChannelName, false, problems, context.CancellationToken);
+
+            return ToChannelResponse(false, problems);
+        }
+
         var channelId = await RequireChannelIdAsync("RollbackChannelRevision", request.ChannelName, context.CancellationToken);
 
         var result = await rollbackChannelRevision.HandleAsync(

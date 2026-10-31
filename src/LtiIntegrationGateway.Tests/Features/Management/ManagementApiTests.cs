@@ -5,6 +5,7 @@ using LtiIntegrationGateway.Infrastructure.Persistence;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
 using LtiIntegrationGateway.Tests.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
+using ProtoRetryRule = LtiIntegrationGateway.Contracts.Management.V1.RetryRule;
 
 namespace LtiIntegrationGateway.Tests.Features.Management;
 
@@ -225,6 +226,7 @@ public class ManagementApiTests
             new RegisterProductRouteRequest
             {
                 ProductId = "dpv",
+                AllowedChannels = { "bank-a" },
                 AllowedQueueAddresses = { "other.queue" },
             },
             ManagementApi.Call());
@@ -289,6 +291,50 @@ public class ManagementApiTests
     }
 
     [Test]
+    public async Task Empty_channel_name_is_rejected_with_error_problem()
+    {
+        using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
+        using var channel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(channel);
+
+        var response = await grpc.CreateChannelAsync(
+            new CreateChannelRequest { Settings = AuthSettings("none", null) },
+            ManagementApi.Call());
+
+        await Assert.That(response.Succeeded).IsFalse();
+
+        var problem = response.Problems.Single(item => item.Code == "name");
+
+        await Assert.That(problem.Severity).IsEqualTo(ProblemSeverity.Error);
+    }
+
+    [Test]
+    public async Task Publishing_channel_without_secret_returns_warning()
+    {
+        using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
+        using var channel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(channel);
+
+        var created = await grpc.CreateChannelAsync(
+            new CreateChannelRequest
+            {
+                Name = "bank-a",
+                Settings = AuthSettings("bearer", "Secrets:BankA:Missing"),
+            },
+            ManagementApi.Call());
+
+        var published = await grpc.PublishChannelRevisionAsync(
+            new PublishChannelRevisionRequest { ChannelName = "bank-a", Revision = created.Revision },
+            ManagementApi.Call());
+
+        await Assert.That(published.Succeeded).IsTrue();
+
+        var warning = published.Problems.Single(item => item.Code == "secret_key_missing");
+
+        await Assert.That(warning.Severity).IsEqualTo(ProblemSeverity.Warning);
+    }
+
+    [Test]
     public async Task Unknown_outbound_operation_returns_not_found()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
@@ -298,4 +344,19 @@ public class ManagementApiTests
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.NotFound);
     }
+
+    private static ChannelSettings AuthSettings(string authType, string? configKey) => new()
+    {
+        BaseUrl = "https://bank-a.example",
+        AuthType = authType,
+        ConfigKey = configKey ?? string.Empty,
+        PerAttemptTimeoutMs = 5000,
+        OverallCapMs = 30000,
+        RetryPolicy =
+        {
+            new ProtoRetryRule { Match = "transport_error", DelaysMs = { 100 } },
+        },
+        AllowedMethods = { "GET" },
+        AllowedPaths = { "/api/contracts" },
+    };
 }

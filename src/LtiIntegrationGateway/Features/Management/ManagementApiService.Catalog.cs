@@ -1,4 +1,5 @@
 using Grpc.Core;
+using LtiIntegrationGateway.Contracts;
 using LtiIntegrationGateway.Contracts.Management.V1;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,6 +12,17 @@ public sealed partial class ManagementApiService
         RegisterProductRouteRequest request,
         ServerCallContext context)
     {
+        var problems = MessageContractValidator.ValidateRegisterProductRoute(
+            request.ProductId,
+            request.AllowedChannels.ToArray());
+
+        if (problems.Count > 0)
+        {
+            await AuditAsync("RegisterProductRoute", request.ProductId, false, problems, context.CancellationToken);
+
+            return ToOperationResponse(false, problems);
+        }
+
         var result = await registerProductRoute.HandleAsync(
             new ProductRoutes.RegisterProductRouteCommand(
                 request.ProductId,

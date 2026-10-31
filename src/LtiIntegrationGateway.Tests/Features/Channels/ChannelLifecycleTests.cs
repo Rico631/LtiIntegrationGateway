@@ -74,7 +74,11 @@ public class ChannelLifecycleTests
 
             channelId = created.ChannelId!.Value;
 
-            var published = await new PublishChannelRevisionHandler(db, new ChannelConfigurationValidator())
+            var published = await new PublishChannelRevisionHandler(
+                    db,
+                    new ChannelConfigurationValidator(),
+                    new TestSecretStore(),
+                    new TestChannelCertificateStore())
                 .HandleAsync(new PublishChannelRevisionCommand(channelId, 1));
 
             await Assert.That(string.Join("; ", published.Problems)).IsEqualTo(string.Empty);
@@ -115,7 +119,11 @@ public class ChannelLifecycleTests
                 new CreateChannelCommand(ChannelTestData.ChannelName, ChannelTestData.ValidConfiguration()));
             channelId = created.ChannelId!.Value;
 
-            var publish = new PublishChannelRevisionHandler(db, new ChannelConfigurationValidator());
+            var publish = new PublishChannelRevisionHandler(
+                db,
+                new ChannelConfigurationValidator(),
+                new TestSecretStore(),
+                new TestChannelCertificateStore());
             var activate = new ActivateChannelRevisionHandler(db);
 
             await publish.HandleAsync(new PublishChannelRevisionCommand(channelId, 1));
@@ -174,7 +182,11 @@ public class ChannelLifecycleTests
                 new CreateChannelCommand(ChannelTestData.ChannelName, ChannelTestData.ValidConfiguration()));
             channelId = created.ChannelId!.Value;
 
-            var publish = new PublishChannelRevisionHandler(db, new ChannelConfigurationValidator());
+            var publish = new PublishChannelRevisionHandler(
+                db,
+                new ChannelConfigurationValidator(),
+                new TestSecretStore(),
+                new TestChannelCertificateStore());
 
             await publish.HandleAsync(new PublishChannelRevisionCommand(channelId, 1));
             await new ActivateChannelRevisionHandler(db)

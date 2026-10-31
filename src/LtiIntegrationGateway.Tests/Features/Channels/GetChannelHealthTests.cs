@@ -76,7 +76,6 @@ public class GetChannelHealthTests
             AttemptCount = 1,
             DeliveryStatus = OutboundDeliveryStatus.Sent,
             CreatedAt = createdAt,
-            CreatedAtUnixMs = createdAt.ToUnixTimeMilliseconds(),
         };
 
     private static InboundMessageLog InboundError(DateTimeOffset receivedAt, string errorCode = "INVALID_JSON") => new()
@@ -90,7 +89,6 @@ public class GetChannelHealthTests
         DeliveryStatus = InboundDeliveryStatus.Failed,
         ErrorCode = errorCode,
         ReceivedAt = receivedAt,
-        ReceivedAtUnixMs = receivedAt.ToUnixTimeMilliseconds(),
     };
 
     [Test]

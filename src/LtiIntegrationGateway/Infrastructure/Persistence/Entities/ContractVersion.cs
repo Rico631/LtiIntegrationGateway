@@ -91,10 +91,4 @@ public sealed class ContractOperation
 
     /// <summary>Переопределение очереди получателя; null — очередь версии контракта.</summary>
     public string? RecipientQueue { get; set; }
-
-    /// <summary>Переопределение квоты запросов на окно; null — квота версии или приложения.</summary>
-    public int? RateLimitPermit { get; set; }
-
-    /// <summary>Переопределение окна квоты в секундах; null — окно версии или приложения.</summary>
-    public int? RateLimitWindowSeconds { get; set; }
 }

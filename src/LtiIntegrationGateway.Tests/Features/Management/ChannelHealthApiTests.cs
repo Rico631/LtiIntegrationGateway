@@ -101,7 +101,6 @@ public class ChannelHealthApiTests
                 AttemptCount = 1,
                 DeliveryStatus = OutboundDeliveryStatus.Sent,
                 CreatedAt = createdAt,
-                CreatedAtUnixMs = createdAt.ToUnixTimeMilliseconds(),
             });
         }
 
@@ -131,7 +130,6 @@ public class ChannelHealthApiTests
                 DeliveryStatus = InboundDeliveryStatus.Failed,
                 ErrorCode = $"IN-{index}",
                 ReceivedAt = receivedAt,
-                ReceivedAtUnixMs = receivedAt.ToUnixTimeMilliseconds(),
             });
         }
 
@@ -166,7 +164,6 @@ public class ChannelHealthApiTests
                 AttemptCount = 1,
                 DeliveryStatus = OutboundDeliveryStatus.Sent,
                 CreatedAt = createdAt,
-                CreatedAtUnixMs = createdAt.ToUnixTimeMilliseconds(),
             });
 
             var receivedAt = createdAt.AddMilliseconds(500);
@@ -181,7 +178,6 @@ public class ChannelHealthApiTests
                 DeliveryStatus = InboundDeliveryStatus.Failed,
                 ErrorCode = $"IN-{index}",
                 ReceivedAt = receivedAt,
-                ReceivedAtUnixMs = receivedAt.ToUnixTimeMilliseconds(),
             });
         }
 

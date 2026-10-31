@@ -2,6 +2,7 @@ using System.Threading.RateLimiting;
 using LtiIntegrationGateway.Contracts.Messages.V1;
 using LtiIntegrationGateway.Features.Channels;
 using LtiIntegrationGateway.Features.Contracts;
+using LtiIntegrationGateway.Features.Host;
 using LtiIntegrationGateway.Features.Inbound;
 using LtiIntegrationGateway.Features.Management;
 using LtiIntegrationGateway.Features.Outbound;
@@ -38,6 +39,7 @@ builder.Services.AddHealthChecks();
 builder.Services.AddGatewayRebus();
 
 builder.Services.AddScoped<ChannelConfigurationValidator>();
+builder.Services.AddScoped<StartupSecretValidator>();
 builder.Services.AddScoped<CreateChannelHandler>();
 builder.Services.AddScoped<UpdateChannelDraftHandler>();
 builder.Services.AddScoped<PublishChannelRevisionHandler>();
@@ -141,6 +143,19 @@ if (string.IsNullOrWhiteSpace(app.Configuration.GetConnectionString("Gateway")))
 using (var migrationScope = app.Services.CreateScope())
 {
     migrationScope.ServiceProvider.GetRequiredService<GatewayDbContext>().Database.Migrate();
+}
+
+using (var startupScope = app.Services.CreateScope())
+{
+    var missingSecrets = await startupScope.ServiceProvider
+        .GetRequiredService<StartupSecretValidator>()
+        .FindMissingAsync();
+
+    if (missingSecrets.Count > 0)
+    {
+        throw new InvalidOperationException(
+            "Не настроены секреты активной конфигурации: " + string.Join("; ", missingSecrets));
+    }
 }
 
 app.UseRateLimiter();

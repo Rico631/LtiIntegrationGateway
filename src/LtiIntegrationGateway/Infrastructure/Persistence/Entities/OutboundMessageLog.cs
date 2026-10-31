@@ -8,6 +8,9 @@ public enum OutboundDeliveryStatus
 
     /// <summary>Результат отправлен продукту.</summary>
     Sent = 2,
+
+    /// <summary>Результат не может быть доставлен: адрес не проверен или отсутствует.</summary>
+    Undeliverable = 3,
 }
 
 /// <summary>Запись журнала исходящего сообщения: тела запроса и ответа для аудита и разбора инцидентов.</summary>
@@ -59,12 +62,9 @@ public sealed class OutboundMessageLog
 
     public OutboundDeliveryStatus DeliveryStatus { get; set; }
 
-    public DateTimeOffset CreatedAt { get; set; }
-
     /// <summary>
-    /// Момент создания записи в миллисекундах Unix: по нему диспетчер выбирает пачку в порядке
-    /// поступления. Отдельная колонка нужна потому, что SQLite не поддерживает сортировку
-    /// по <see cref="DateTimeOffset"/>.
+    /// Момент создания записи; в хранилище кодируется миллисекундами Unix, чтобы SQLite мог
+    /// сортировать и индексировать значение.
     /// </summary>
-    public long CreatedAtUnixMs { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
 }

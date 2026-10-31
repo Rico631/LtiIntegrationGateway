@@ -132,7 +132,8 @@ public class ContractRegistryTests
         var upload = await UploadAsync(grpc, "bank-a", OpenApiSamples.UnknownFormat);
 
         await Assert.That(upload.Succeeded).IsTrue();
-        await Assert.That(upload.Warnings.Any(warning =>
-            warning.Contains("bank-account", StringComparison.Ordinal))).IsTrue();
+        await Assert.That(upload.Problems.Any(problem =>
+            problem.Severity == ProblemSeverity.Warning &&
+            problem.Message.Contains("bank-account", StringComparison.Ordinal))).IsTrue();
     }
 }

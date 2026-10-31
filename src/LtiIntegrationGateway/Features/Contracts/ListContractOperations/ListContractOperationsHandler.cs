@@ -12,9 +12,7 @@ public sealed record ContractOperationDetails(
     string Template,
     string? OperationId,
     bool Enabled,
-    string? RecipientQueue,
-    int? RateLimitPermit,
-    int? RateLimitWindowSeconds);
+    string? RecipientQueue);
 
 public sealed record ListContractOperationsResult(
     IReadOnlyList<ContractOperationDetails> Operations,
@@ -47,9 +45,7 @@ public sealed class ListContractOperationsHandler(GatewayDbContext db)
                 operation.Template,
                 operation.OperationId,
                 operation.Enabled,
-                operation.RecipientQueue,
-                operation.RateLimitPermit,
-                operation.RateLimitWindowSeconds))
+                operation.RecipientQueue))
             .ToArray();
 
         return new ListContractOperationsResult(operations, []);

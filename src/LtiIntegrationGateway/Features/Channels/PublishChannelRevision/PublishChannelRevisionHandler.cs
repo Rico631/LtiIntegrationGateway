@@ -1,5 +1,6 @@
 using LtiIntegrationGateway.Infrastructure.Persistence;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace LtiIntegrationGateway.Features.Channels;
@@ -7,9 +8,20 @@ namespace LtiIntegrationGateway.Features.Channels;
 /// <summary>Публикация черновика: ревизия становится неизменяемой.</summary>
 public sealed record PublishChannelRevisionCommand(Guid ChannelId, int? RevisionNumber);
 
-public sealed record PublishChannelRevisionResult(int? RevisionNumber, IReadOnlyList<string> Problems);
+/// <summary>
+/// Результат публикации: проблемы блокируют публикацию, предупреждения (например, отсутствующий
+/// секрет) не мешают ревизии стать опубликованной.
+/// </summary>
+public sealed record PublishChannelRevisionResult(
+    int? RevisionNumber,
+    IReadOnlyList<string> Problems,
+    IReadOnlyList<string> Warnings);
 
-public sealed class PublishChannelRevisionHandler(GatewayDbContext db, ChannelConfigurationValidator validator)
+public sealed class PublishChannelRevisionHandler(
+    GatewayDbContext db,
+    ChannelConfigurationValidator validator,
+    ISecretStore secrets,
+    IChannelCertificateStore certificates)
 {
     public async Task<PublishChannelRevisionResult> HandleAsync(
         PublishChannelRevisionCommand command,
@@ -23,7 +35,7 @@ public sealed class PublishChannelRevisionHandler(GatewayDbContext db, ChannelCo
 
         if (channel is null)
         {
-            return new PublishChannelRevisionResult(null, ["channel: канал не найден"]);
+            return new PublishChannelRevisionResult(null, ["channel: канал не найден"], []);
         }
 
         var revision = command.RevisionNumber is { } number
@@ -32,21 +44,23 @@ public sealed class PublishChannelRevisionHandler(GatewayDbContext db, ChannelCo
 
         if (revision is null)
         {
-            return new PublishChannelRevisionResult(null, ["revision: черновик не найден"]);
+            return new PublishChannelRevisionResult(null, ["revision: черновик не найден"], []);
         }
 
         if (revision.Status != ChannelRevisionStatus.Draft)
         {
             return new PublishChannelRevisionResult(
                 revision.Number,
-                ["revision_not_editable: публиковать можно только черновик"]);
+                ["revision_not_editable: публиковать можно только черновик"],
+                []);
         }
 
-        var problems = validator.Validate(ChannelRevisionWriter.Read(revision));
+        var configuration = ChannelRevisionWriter.Read(revision);
+        var problems = validator.Validate(configuration);
 
         if (problems.Count > 0)
         {
-            return new PublishChannelRevisionResult(revision.Number, problems);
+            return new PublishChannelRevisionResult(revision.Number, problems, []);
         }
 
         revision.Status = ChannelRevisionStatus.Published;
@@ -54,6 +68,26 @@ public sealed class PublishChannelRevisionHandler(GatewayDbContext db, ChannelCo
 
         await db.SaveChangesAsync(cancellationToken);
 
-        return new PublishChannelRevisionResult(revision.Number, []);
+        return new PublishChannelRevisionResult(revision.Number, [], CheckSecret(configuration));
+    }
+
+    /// <summary>
+    /// Предупреждение не блокирует публикацию: ревизия может быть опубликована до настройки секрета,
+    /// но рантайм не сможет выполнить исходящий вызов, пока значение не появится.
+    /// </summary>
+    private IReadOnlyList<string> CheckSecret(ChannelConfiguration configuration)
+    {
+        if (configuration.AuthType == ChannelAuthType.None)
+        {
+            return [];
+        }
+
+        var configured = configuration.AuthType == ChannelAuthType.ClientCertificate
+            ? certificates.GetInfo(configuration.ConfigKey).Found
+            : secrets.Find(configuration.ConfigKey ?? string.Empty) is not null;
+
+        return configured
+            ? []
+            : [$"secret_key_missing: значение секрета по ключу '{configuration.ConfigKey}' не настроено"];
     }
 }

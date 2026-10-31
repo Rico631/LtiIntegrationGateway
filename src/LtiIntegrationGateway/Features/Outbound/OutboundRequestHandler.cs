@@ -1,4 +1,6 @@
+using LtiIntegrationGateway.Contracts;
 using LtiIntegrationGateway.Contracts.Messages.V1;
+using Rebus.Exceptions;
 using Rebus.Handlers;
 using Rebus.Messages;
 using Rebus.Pipeline;
@@ -12,6 +14,15 @@ public sealed class OutboundRequestHandler(ProcessOutboundRequestHandler process
 {
     public async Task Handle(OutboundRequest message)
     {
+        var problems = MessageContractValidator.ValidateOutboundRequest(message);
+
+        if (problems.Count > 0)
+        {
+            // Невалидный DTO не журналируется: у него может не быть message_id и канала.
+            throw new FailFastException(
+                $"OutboundRequest: нарушены обязательные поля: {string.Join(", ", problems)}");
+        }
+
         var headers = MessageContext.Current?.Headers;
 
         await processor.HandleAsync(new ProcessOutboundRequestCommand(

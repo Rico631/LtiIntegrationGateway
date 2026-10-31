@@ -1,4 +1,5 @@
 using Grpc.Core;
+using LtiIntegrationGateway.Contracts;
 using LtiIntegrationGateway.Contracts.Management.V1;
 
 namespace LtiIntegrationGateway.Features.Management;
@@ -10,6 +11,13 @@ public sealed partial class ManagementApiService
         UploadContractRequest request,
         ServerCallContext context)
     {
+        var problems = MessageContractValidator.ValidateUploadContract(request.ChannelName, request.Document);
+
+        if (problems.Count > 0)
+        {
+            return ToContractResponse(false, 0, null, problems, []);
+        }
+
         var result = await uploadContractVersion.HandleAsync(
             new Contracts.UploadContractVersionCommand(request.ChannelName, request.Document),
             context.CancellationToken);
@@ -21,6 +29,13 @@ public sealed partial class ManagementApiService
         PublishContractVersionRequest request,
         ServerCallContext context)
     {
+        var problems = MessageContractValidator.ValidateContractVersionCommand(request.ChannelName, request.Version);
+
+        if (problems.Count > 0)
+        {
+            return ToContractResponse(false, request.Version, null, problems, []);
+        }
+
         var result = await publishContractVersion.HandleAsync(
             new Contracts.PublishContractVersionCommand(request.ChannelName, request.Version),
             context.CancellationToken);
@@ -34,6 +49,13 @@ public sealed partial class ManagementApiService
         ActivateContractVersionRequest request,
         ServerCallContext context)
     {
+        var problems = MessageContractValidator.ValidateContractVersionCommand(request.ChannelName, request.Version);
+
+        if (problems.Count > 0)
+        {
+            return ToContractResponse(false, request.Version, null, problems, []);
+        }
+
         var result = await activateContractVersion.HandleAsync(
             new Contracts.ActivateContractVersionCommand(request.ChannelName, request.Version),
             context.CancellationToken);
@@ -113,13 +135,11 @@ public sealed partial class ManagementApiService
         UpdateContractVersionSettingsRequest request,
         ServerCallContext context)
     {
-        var problems = new List<string>();
+        var problems = MessageContractValidator.ValidateUpdateContractVersionSettings(
+            request.ChannelName,
+            request.Version,
+            request.Settings).ToList();
         var authType = ChannelMapping.ParseAuthType(request.Settings?.AuthType, problems);
-
-        if (request.Settings is null)
-        {
-            problems.Add("settings: настройки обязательны");
-        }
 
         if (problems.Count > 0)
         {
@@ -155,13 +175,21 @@ public sealed partial class ManagementApiService
         UpdateContractOperationSettingsRequest request,
         ServerCallContext context)
     {
+        var problems = MessageContractValidator.ValidateUpdateContractOperationSettings(
+            request.ChannelName,
+            request.Version,
+            request.OperationId);
+
+        if (problems.Count > 0)
+        {
+            return ToContractResponse(false, request.Version, null, problems, []);
+        }
+
         // Presence в proto3 optional различает «поле не передано» и «передано пустое/ноль»:
         // отсутствующее поле не меняет настройку.
         var patch = new Contracts.ContractOperationSettingsPatch(
             request.HasEnabled ? request.Enabled : null,
-            request.HasRecipientQueue ? request.RecipientQueue : null,
-            request.HasRateLimitPermit ? request.RateLimitPermit : null,
-            request.HasRateLimitWindowSeconds ? request.RateLimitWindowSeconds : null);
+            request.HasRecipientQueue ? request.RecipientQueue : null);
 
         var result = await updateContractOperationSettings.HandleAsync(
             new Contracts.UpdateContractOperationSettingsCommand(
@@ -186,8 +214,6 @@ public sealed partial class ManagementApiService
         OperationId = operation.OperationId ?? string.Empty,
         Enabled = operation.Enabled,
         RecipientQueue = operation.RecipientQueue ?? string.Empty,
-        RateLimitPermit = operation.RateLimitPermit ?? 0,
-        RateLimitWindowSeconds = operation.RateLimitWindowSeconds ?? 0,
     };
 
     private static ContractVersionSettings ToSettings(Contracts.ContractVersionSettings settings) => new()
@@ -216,7 +242,7 @@ public sealed partial class ManagementApiService
         };
 
         response.Problems.AddRange(problems.Select(ToProblem));
-        response.Warnings.AddRange(warnings);
+        response.Problems.AddRange(warnings.Select(ToWarning));
 
         return response;
     }

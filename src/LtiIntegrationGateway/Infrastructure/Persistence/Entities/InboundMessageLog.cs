@@ -47,12 +47,9 @@ public sealed class InboundMessageLog
     /// <summary>Код ошибки при отклонении вызова; пусто для принятого вызова.</summary>
     public string? ErrorCode { get; set; }
 
-    public DateTimeOffset ReceivedAt { get; set; }
-
     /// <summary>
-    /// Момент приёма вызова в миллисекундах Unix: по нему строятся выборки «последние ошибки» в
-    /// порядке времени. Отдельная колонка нужна потому, что SQLite не поддерживает сортировку
-    /// по <see cref="DateTimeOffset"/>.
+    /// Момент приёма вызова; в хранилище кодируется миллисекундами Unix, чтобы SQLite мог
+    /// сортировать и индексировать значение.
     /// </summary>
-    public long ReceivedAtUnixMs { get; set; }
+    public DateTimeOffset ReceivedAt { get; set; }
 }

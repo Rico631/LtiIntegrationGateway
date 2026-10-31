@@ -25,8 +25,6 @@ public class ContractOperationSettingsTests
     private static ContractOperation Operation(
         bool enabled = true,
         string? queue = null,
-        int? permit = null,
-        int? window = null,
         string method = "POST",
         string template = "/callbacks/contracts",
         string? operationId = "receiveContract") => new()
@@ -38,22 +36,20 @@ public class ContractOperationSettingsTests
         OperationId = operationId,
         Enabled = enabled,
         RecipientQueue = queue,
-        RateLimitPermit = permit,
-        RateLimitWindowSeconds = window,
     };
 
     [Test]
-    public async Task Operation_queue_and_quota_override_version_and_application()
+    public async Task Operation_queue_overrides_version_and_quota_comes_from_version()
     {
         var effective = ContractOperationSettings.Resolve(
-            Operation(queue: "operation.queue", permit: 5, window: 15),
+            Operation(queue: "operation.queue"),
             VersionSettings(),
             ApplicationDefaults);
 
         await Assert.That(effective.Enabled).IsTrue();
         await Assert.That(effective.RecipientQueue).IsEqualTo("operation.queue");
-        await Assert.That(effective.RateLimitPermit).IsEqualTo(5);
-        await Assert.That(effective.RateLimitWindowSeconds).IsEqualTo(15);
+        await Assert.That(effective.RateLimitPermit).IsEqualTo(10);
+        await Assert.That(effective.RateLimitWindowSeconds).IsEqualTo(30);
     }
 
     [Test]
@@ -89,7 +85,7 @@ public class ContractOperationSettingsTests
             VersionId,
             "bank-a",
             [
-                Operation(queue: "operation.queue", permit: 5, window: 15),
+                Operation(queue: "operation.queue"),
                 Operation(method: "GET", template: "/callbacks/orders", operationId: "listOrders", enabled: false),
             ],
             VersionSettings(),
@@ -101,8 +97,8 @@ public class ContractOperationSettingsTests
 
         await Assert.That(enabled.Enabled).IsTrue();
         await Assert.That(enabled.RecipientQueue).IsEqualTo("operation.queue");
-        await Assert.That(enabled.RateLimitPermit).IsEqualTo(5);
-        await Assert.That(enabled.RateLimitWindowSeconds).IsEqualTo(15);
+        await Assert.That(enabled.RateLimitPermit).IsEqualTo(10);
+        await Assert.That(enabled.RateLimitWindowSeconds).IsEqualTo(30);
 
         var disabled = set.Routes.Single(route => route.OperationId == "listOrders");
 

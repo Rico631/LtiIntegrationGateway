@@ -174,7 +174,11 @@ public sealed class OutboundFixture : IAsyncDisposable
 
         var created = await new CreateChannelHandler(db).HandleAsync(new CreateChannelCommand(channelName, configuration));
 
-        await new PublishChannelRevisionHandler(db, new ChannelConfigurationValidator())
+        await new PublishChannelRevisionHandler(
+                db,
+                new ChannelConfigurationValidator(),
+                new TestSecretStore(),
+                new TestChannelCertificateStore())
             .HandleAsync(new PublishChannelRevisionCommand(created.ChannelId!.Value, 1));
 
         await new ActivateChannelRevisionHandler(db)

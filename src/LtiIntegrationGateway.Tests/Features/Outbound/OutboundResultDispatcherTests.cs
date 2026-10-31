@@ -272,12 +272,9 @@ public class OutboundResultDispatcherTests
             await Assert.That(result.Completed).IsFalse();
         }
 
-        var refusal = await fixture.Results.WaitForSingleAsync(DeliveryTimeout);
+        // Чужой отказ не доставляется и не помечает запись владельца как доставленную.
+        await Assert.That(fixture.Results.Results.Count).IsEqualTo(0);
 
-        await Assert.That(refusal.Outcome).IsEqualTo(Outcome.GatewayRefused);
-        await Assert.That(refusal.ErrorCode).IsEqualTo(OutboundErrorCodes.ProductNotAllowed);
-
-        // Чужой отказ не помечает запись владельца как доставленную и не создаёт новую.
         using (var db = fixture.CreateDb())
         {
             var log = await db.OutboundMessageLogs.SingleAsync();
@@ -351,7 +348,6 @@ public class OutboundResultDispatcherTests
             AttemptCount = 1,
             DeliveryStatus = OutboundDeliveryStatus.Pending,
             CreatedAt = createdAt,
-            CreatedAtUnixMs = createdAt.ToUnixTimeMilliseconds(),
         });
 
         await db.SaveChangesAsync();

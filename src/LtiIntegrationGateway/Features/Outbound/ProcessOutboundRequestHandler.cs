@@ -50,7 +50,7 @@ public sealed class ProcessOutboundRequestHandler(
                 command,
                 OutboundErrorCodes.ProductNotAllowed,
                 "операция принадлежит другому продукту",
-                allowUnverifiedAddress: false,
+                deliverResult: false,
                 existing,
                 cancellationToken);
         }
@@ -67,7 +67,7 @@ public sealed class ProcessOutboundRequestHandler(
                 command,
                 identity.ErrorCode,
                 identity.ErrorMessage,
-                allowUnverifiedAddress: true,
+                deliverResult: false,
                 existing,
                 cancellationToken);
         }
@@ -79,7 +79,7 @@ public sealed class ProcessOutboundRequestHandler(
                 command,
                 OutboundErrorCodes.ProductNotAllowed,
                 "адрес доставки результата не разрешён продукту",
-                allowUnverifiedAddress: false,
+                deliverResult: false,
                 existing,
                 cancellationToken);
         }
@@ -99,7 +99,7 @@ public sealed class ProcessOutboundRequestHandler(
                 command,
                 OutboundErrorCodes.ChannelNotActive,
                 $"у канала '{request.ChannelName}' нет активной ревизии",
-                allowUnverifiedAddress: true,
+                deliverResult: true,
                 existing,
                 cancellationToken);
         }
@@ -110,7 +110,7 @@ public sealed class ProcessOutboundRequestHandler(
                 command,
                 OutboundErrorCodes.MethodNotAllowed,
                 "метод не разрешён каналом",
-                allowUnverifiedAddress: true,
+                deliverResult: true,
                 existing,
                 cancellationToken,
                 channelRevisionNumber: channel.Number);
@@ -123,7 +123,7 @@ public sealed class ProcessOutboundRequestHandler(
                 command,
                 OutboundErrorCodes.PathNotAllowed,
                 "путь не разрешён каналом",
-                allowUnverifiedAddress: true,
+                deliverResult: true,
                 existing,
                 cancellationToken,
                 channelRevisionNumber: channel.Number);
@@ -137,7 +137,7 @@ public sealed class ProcessOutboundRequestHandler(
                 command,
                 authorization.ErrorCode,
                 authorization.ErrorMessage,
-                allowUnverifiedAddress: true,
+                deliverResult: true,
                 existing,
                 cancellationToken,
                 channelRevisionNumber: channel.Number);
@@ -182,7 +182,7 @@ public sealed class ProcessOutboundRequestHandler(
             command.ReturnAddress,
             channel.Number,
             outcome,
-            cancellationToken);
+            cancellationToken: cancellationToken);
 
         await publisher.HandleAsync(BuildResult(request, outcome), command.ReturnAddress, log, cancellationToken);
 
@@ -193,13 +193,15 @@ public sealed class ProcessOutboundRequestHandler(
         ProcessOutboundRequestCommand command,
         string errorCode,
         string? errorMessage,
-        bool allowUnverifiedAddress,
+        bool deliverResult,
         OutboundOperation? existing,
         CancellationToken cancellationToken,
         int? channelRevisionNumber = null)
     {
         var request = command.Request;
         var outcome = OutboundHttpOutcome.Refused(errorCode, errorMessage ?? "запрос отклонён шлюзом");
+        var acceptsResult = deliverResult && !string.IsNullOrWhiteSpace(command.ReturnAddress);
+        var address = acceptsResult ? command.ReturnAddress : null;
 
         var operation = existing;
         OutboundMessageLog? createdLog = null;
@@ -207,16 +209,17 @@ public sealed class ProcessOutboundRequestHandler(
         if (operation is null)
         {
             // Операции не было: отказ фиксируется в журнале как единственный результат запроса.
-            operation = await recorder.TryStartAsync(request, command.ReturnAddress, cancellationToken);
+            operation = await recorder.TryStartAsync(request, address, cancellationToken);
 
             if (operation is not null)
             {
                 createdLog = await recorder.CompleteAsync(
                     operation,
                     request,
-                    command.ReturnAddress,
+                    address,
                     channelRevisionNumber,
                     outcome,
+                    acceptsResult ? OutboundDeliveryStatus.Pending : OutboundDeliveryStatus.Undeliverable,
                     cancellationToken);
             }
             else
@@ -228,21 +231,19 @@ public sealed class ProcessOutboundRequestHandler(
 
         // Завершённая операция принадлежит первому результату: журнал и статус не меняются, а
         // сохранённый результат не подменяется свежим отказом.
-        var address = command.ReturnAddress;
-
-        if (!string.IsNullOrWhiteSpace(address) && (allowUnverifiedAddress || operation is not null))
+        if (acceptsResult)
         {
             var result = BuildResult(request, outcome);
 
             if (createdLog is not null)
             {
-                await publisher.HandleAsync(result, address, createdLog, cancellationToken);
+                await publisher.HandleAsync(result, address!, createdLog, cancellationToken);
             }
             else
             {
                 // Отказ не создавал записи журнала: чужая или уже завершённая операция остаётся
                 // в своём статусе, иначе сохранённый результат владельца потерялся бы.
-                await publisher.SendAsync(result, address);
+                await publisher.SendAsync(result, address!);
             }
         }
 
@@ -261,7 +262,7 @@ public sealed class ProcessOutboundRequestHandler(
                 command,
                 OutboundErrorCodes.ProductNotAllowed,
                 "операция принадлежит другому продукту",
-                allowUnverifiedAddress: false,
+                deliverResult: false,
                 operation,
                 cancellationToken);
         }

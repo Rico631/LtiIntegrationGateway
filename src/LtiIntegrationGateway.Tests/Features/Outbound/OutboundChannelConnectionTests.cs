@@ -183,7 +183,11 @@ public class OutboundChannelConnectionTests
             var draft = await new UpdateChannelDraftHandler(db)
                 .HandleAsync(new UpdateChannelDraftCommand(channelId, null, configuration));
 
-            await new PublishChannelRevisionHandler(db, new ChannelConfigurationValidator())
+            await new PublishChannelRevisionHandler(
+                    db,
+                    new ChannelConfigurationValidator(),
+                    new TestSecretStore(),
+                    new TestChannelCertificateStore())
                 .HandleAsync(new PublishChannelRevisionCommand(channelId, draft.RevisionNumber));
 
             await new ActivateChannelRevisionHandler(db)

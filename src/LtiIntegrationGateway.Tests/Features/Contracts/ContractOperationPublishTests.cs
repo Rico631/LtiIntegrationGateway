@@ -27,9 +27,7 @@ public class ContractOperationPublishTests
             grpc,
             version: 1,
             operationId: "receiveContract",
-            recipientQueue: OperationQueue,
-            rateLimitPermit: 5,
-            rateLimitWindowSeconds: 20);
+            recipientQueue: OperationQueue);
 
         await Assert.That(patched.Succeeded).IsTrue();
 
@@ -49,15 +47,11 @@ public class ContractOperationPublishTests
 
         await Assert.That(transferred.Enabled).IsTrue();
         await Assert.That(transferred.RecipientQueue).IsEqualTo(OperationQueue);
-        await Assert.That(transferred.RateLimitPermit).IsEqualTo(5);
-        await Assert.That(transferred.RateLimitWindowSeconds).IsEqualTo(20);
 
         var added = operations.Operations.Single(operation => operation.Template == "/callbacks/orders");
 
         await Assert.That(added.Enabled).IsTrue();
         await Assert.That(added.RecipientQueue).IsEmpty();
-        await Assert.That(added.RateLimitPermit).IsEqualTo(0);
-        await Assert.That(added.RateLimitWindowSeconds).IsEqualTo(0);
     }
 
     [Test]
@@ -78,9 +72,7 @@ public class ContractOperationPublishTests
             grpc,
             version: 1,
             operationId: "receiveContract",
-            recipientQueue: OperationQueue,
-            rateLimitPermit: 7,
-            rateLimitWindowSeconds: 30);
+            recipientQueue: OperationQueue);
 
         await Assert.That(patched.Succeeded).IsTrue();
 
@@ -97,8 +89,6 @@ public class ContractOperationPublishTests
         await Assert.That(operations.Operations.Count).IsEqualTo(1);
         await Assert.That(operations.Operations[0].OperationId).IsEmpty();
         await Assert.That(operations.Operations[0].RecipientQueue).IsEqualTo(OperationQueue);
-        await Assert.That(operations.Operations[0].RateLimitPermit).IsEqualTo(7);
-        await Assert.That(operations.Operations[0].RateLimitWindowSeconds).IsEqualTo(30);
     }
 
     [Test]
@@ -245,9 +235,7 @@ public class ContractOperationPublishTests
             grpc,
             version: 1,
             operationId: "receiveContract",
-            recipientQueue: OperationQueue,
-            rateLimitPermit: 5,
-            rateLimitWindowSeconds: 20);
+            recipientQueue: OperationQueue);
 
         await Assert.That(patched.Succeeded).IsTrue();
 
@@ -265,7 +253,5 @@ public class ContractOperationPublishTests
         await Assert.That(operations.Operations[0].OperationId).IsEqualTo("receiveContractV2");
         await Assert.That(operations.Operations[0].Enabled).IsTrue();
         await Assert.That(operations.Operations[0].RecipientQueue).IsEmpty();
-        await Assert.That(operations.Operations[0].RateLimitPermit).IsEqualTo(0);
-        await Assert.That(operations.Operations[0].RateLimitWindowSeconds).IsEqualTo(0);
     }
 }

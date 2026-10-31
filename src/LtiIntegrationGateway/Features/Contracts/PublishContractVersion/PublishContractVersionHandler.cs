@@ -164,8 +164,6 @@ public sealed class PublishContractVersionHandler(
                     $"{operation.HttpMethod} {operation.Template}"),
                 Enabled = source?.Enabled ?? true,
                 RecipientQueue = source?.RecipientQueue,
-                RateLimitPermit = source?.RateLimitPermit,
-                RateLimitWindowSeconds = source?.RateLimitWindowSeconds,
             });
         }
 

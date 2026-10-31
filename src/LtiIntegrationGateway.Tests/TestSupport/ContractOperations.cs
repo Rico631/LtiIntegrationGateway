@@ -129,8 +129,6 @@ public static class ContractOperations
         string operationId,
         bool? enabled = null,
         string? recipientQueue = null,
-        int? rateLimitPermit = null,
-        int? rateLimitWindowSeconds = null,
         string channelName = ChannelName)
     {
         var request = new UpdateContractOperationSettingsRequest
@@ -148,16 +146,6 @@ public static class ContractOperations
         if (recipientQueue is not null)
         {
             request.RecipientQueue = recipientQueue;
-        }
-
-        if (rateLimitPermit is { } permit)
-        {
-            request.RateLimitPermit = permit;
-        }
-
-        if (rateLimitWindowSeconds is { } window)
-        {
-            request.RateLimitWindowSeconds = window;
         }
 
         return await client.UpdateContractOperationSettingsAsync(request, ManagementApi.Call());

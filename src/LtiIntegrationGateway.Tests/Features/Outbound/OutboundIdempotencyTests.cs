@@ -111,11 +111,7 @@ public class OutboundIdempotencyTests
         }
 
         await Assert.That(fixture.Http.CallCount).IsEqualTo(0);
-
-        var delivered = await fixture.Results.WaitForSingleAsync(DeliveryTimeout);
-
-        await Assert.That(delivered.ErrorCode).IsEqualTo(OutboundErrorCodes.ProductNotAllowed);
-        await Assert.That(delivered.Outcome).IsEqualTo(Outcome.GatewayRefused);
+        await Assert.That(fixture.Results.Results.Count).IsEqualTo(0);
 
         // Состояние чужой операции и журнал не меняются: сохранённый результат не отдаётся,
         // а запись отказа не создаётся.

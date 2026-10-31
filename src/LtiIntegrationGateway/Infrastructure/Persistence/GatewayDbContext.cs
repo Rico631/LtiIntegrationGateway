@@ -30,6 +30,14 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
         policy => SerializeRetryPolicy(policy).GetHashCode(StringComparison.Ordinal),
         policy => DeserializeRetryPolicy(SerializeRetryPolicy(policy)));
 
+    /// <summary>
+    /// Хранит момент времени как миллисекунды Unix: SQLite не умеет сортировать DateTimeOffset,
+    /// а целочисленная колонка сохраняет порядок и участвует в индексах.
+    /// </summary>
+    private static readonly ValueConverter<DateTimeOffset, long> UnixMillisecondsConverter = new(
+        value => value.ToUnixTimeMilliseconds(),
+        value => DateTimeOffset.FromUnixTimeMilliseconds(value));
+
     public DbSet<Channel> Channels => Set<Channel>();
 
     public DbSet<ChannelRevision> ChannelRevisions => Set<ChannelRevision>();
@@ -189,13 +197,14 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
             log.Property(entity => entity.ErrorMessage).HasMaxLength(2048);
             log.Property(entity => entity.DeliveryAddress).HasMaxLength(256).IsRequired();
             log.Property(entity => entity.DeliveryStatus).HasConversion<string>().HasMaxLength(16);
+            log.Property(entity => entity.CreatedAt).HasConversion(UnixMillisecondsConverter);
             log.HasIndex(entity => new { entity.MessageId, entity.DeliveryStatus });
             // Индекс для диспетчера: выборка недоставленных записей в порядке создания без
-            // полного сканирования (SQLite не умеет ORDER BY по DateTimeOffset).
-            log.HasIndex(entity => new { entity.DeliveryStatus, entity.CreatedAtUnixMs });
+            // полного сканирования (CreatedAt хранится как миллисекунды Unix).
+            log.HasIndex(entity => new { entity.DeliveryStatus, entity.CreatedAt });
             // Индекс для выборки последних ошибок канала: здоровье канала читает журнал по каналу
-            // в порядке времени (SQLite не умеет ORDER BY по DateTimeOffset).
-            log.HasIndex(entity => new { entity.ChannelName, entity.CreatedAtUnixMs });
+            // в порядке времени.
+            log.HasIndex(entity => new { entity.ChannelName, entity.CreatedAt });
         });
 
         modelBuilder.Entity<ContractVersion>(version =>
@@ -253,11 +262,11 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
             log.Property(entity => entity.QueryParameters).HasMaxLength(4096);
             log.Property(entity => entity.DeliveryStatus).HasConversion<string>().HasMaxLength(16);
             log.Property(entity => entity.ErrorCode).HasMaxLength(64);
+            log.Property(entity => entity.ReceivedAt).HasConversion(UnixMillisecondsConverter);
             log.HasIndex(entity => entity.MessageId);
+            // Индекс для выборки последних ошибок канала: здоровье канала читает журнал по каналу
+            // в порядке времени.
             log.HasIndex(entity => new { entity.ChannelName, entity.ReceivedAt });
-            // Индекс для выборки последних ошибок канала: SQLite не умеет ORDER BY по DateTimeOffset,
-            // поэтому порядок задаётся колонкой Unix-миллисекунд.
-            log.HasIndex(entity => new { entity.ChannelName, entity.ReceivedAtUnixMs });
         });
     }
 

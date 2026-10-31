@@ -138,10 +138,17 @@ Features/Contracts
 ├── ListContractOperations         операции версии с настройками
 ├── GetContractVersion             версия с настройками и операциями
 ├── UpdateContractVersionSettings  настройки приёма черновика
-├── UpdateContractOperationSettings настройки операции: enabled, очередь, квота; применение без перезапуска
+├── UpdateContractOperationSettings настройки операции: enabled, очередь; применение без перезапуска
 ├── ContractVersionSettings        настройки приёма версии (record)
-├── ContractOperationSettings      действующие настройки операции: операция → версия → приложение (record)
+├── ContractOperationSettings      действующие настройки операции: очередь — операция → версия; квота — версия → приложение (record)
 └── ContractRouteSets              InboundRouteSet из операций версии с действующими настройками
+```
+
+### Хост (spec `gateway-host`)
+
+```text
+Features/Host
+└── StartupSecretValidator  проверка секретов активных ревизий каналов и версий контрактов при старте
 ```
 
 ### Входящий контур (spec `inbound-dispatch`)
@@ -198,6 +205,7 @@ Features/Management
 | `OpenApi/InboundSchemaCache` | скомпилированные схемы активных ревизий | `NJsonSchema` 11.6.1, компиляция при активации |
 | `Management/ManagementApiKeyMiddleware` | ключ управляющего API | `401`/`503`, gRPC `Unauthenticated` |
 | `Management/ManagementAuditWriter` | аудит управляющих операций, включая чтение и отказы `NotFound` | без значений секретов; усечение объекта и деталей до длин модели |
+| `Features/Host/StartupSecretValidator` | fail-fast проверка секретов активной конфигурации после миграций | активные ревизии каналов и версии контрактов; сообщения содержат только имена ключей |
 | `Security/ConfigurationSecretStore` | значение секрета по ключу | только `IConfiguration` |
 | `Security/ConfigurationChannelCertificateStore` | клиентский сертификат по `config_key` | PFX из файла или base64, пароль `<config_key>:Password`, кэш на время жизни процесса |
 | `Http/ChannelHttpClientPool` | пул `SocketsHttpHandler` по ключу канала | TLS 1.2+, без редиректов, проверка серверного сертификата, срок жизни соединения 5 минут |
@@ -231,11 +239,13 @@ Features/Management
 канала, метод и путь, авторизация) → операция `Accepted` → `InProgress` → HTTP-вызов с повторами →
 **одна транзакция**: операция `Completed` + запись журнала
 `pending` (с адресом доставки, `correlation_id`, текстом ошибки, номером ревизии канала и
-`CreatedAtUnixMs`) → `Send` результата → журнал `sent`. Отказы фиксируются в журнале и возвращаются
-продукту (ADR §8, spec `outbound-dispatch`).
+`CreatedAt`) → `Send` результата → журнал `sent`. Отказы, возникшие до проверки адреса возврата,
+не доставляются: операция `Completed`, журнал `undeliverable`, адрес пуст. Невалидный DTO
+(`FailFastException`) уходит в `lti.gateway.error` без операции, журнала и HTTP-вызова
+(ADR §8, spec `outbound-dispatch`).
 
 Недоставленные записи `pending` повторно отправляет `OutboundResultDispatcher`: выборка идёт в SQL по
-индексу `(DeliveryStatus, CreatedAtUnixMs)` с фильтром «адрес не пуст и операция существует», поэтому
+индексу `(DeliveryStatus, CreatedAt)` с фильтром «адрес не пуст и операция существует», поэтому
 недоставляемые записи не занимают пачку; отправка и фиксация статуса обрабатываются по отдельности, а
 гарантия остаётся «минимум один раз». Повторный `OutboundRequest` с завершённым `message_id` отдаёт
 идентичный сохранённый результат на адрес из текущего сообщения; владение `product_id` проверяется до
@@ -254,8 +264,9 @@ Features/Management
 (ADR §5.2, spec `contract-registry`).
 
 **Настройки операции.** Действующие значения вычисляются при построении набора маршрутов
-(`ContractRouteSets`): очередь, квота и окно — операция, иначе версия, квота и окно версии — иначе
-`Inbound:RateLimit:*`; авторизация берётся только из версии. Операции извлекаются при публикации,
+(`ContractRouteSets`): очередь — операция, иначе версия; квота и окно — только версия, иначе
+`Inbound:RateLimit:*`; авторизация берётся только из версии. Все операции канала делят один
+бюджет ограничения частоты. Операции извлекаются при публикации,
 поэтому для черновика настройки операции недоступны (`404`). Изменение настроек версии `Active`
 перерегистрирует набор с тем же ключом ревизии: отказ каталога оставляет прежний набор и не меняет
 базу; версия `Superseded` отклоняется с проблемой `version` (ADR §7.3, §15.2).
@@ -281,7 +292,7 @@ Features/Management
 | Ревизия — агрегат настроек, в `Channel` настроек нет | неизменяемость опубликованного и безопасный откат |
 | Результат операции — запись с `Problems`, а не исключение | отказ домена не является сбоем, список проблем возвращается целиком |
 | Новые дочерние сущности добавляются через `DbSet`, а не только в навигацию | клиентский Guid-ключ: EF считает их `Modified`, `UPDATE` не находит строку |
-| Сортировка по `DateTimeOffset` не используется в SQLite-запросах | SQLite не поддерживает такие `ORDER BY`; порядок записей журнала задаётся колонками `CreatedAtUnixMs` (исходящие) и `ReceivedAtUnixMs` (входящие), в памяти сортируется только ограниченное окно |
+| Моменты времени журналов хранятся как миллисекунды Unix через EF-конвертер | SQLite не умеет сортировать `DateTimeOffset`; преобразование типа скрыто в модели, а индексы и `ORDER BY` работают по `CreatedAt`/`ReceivedAt` |
 | Строковые поля proto заполняются только непустыми значениями | присваивание `null` бросает `ArgumentNullException` |
 | Динамические endpoint'ы добавляются в `IEndpointRouteBuilder.DataSources` | регистрации `EndpointDataSource` в DI недостаточно (ADR §5.2) |
 | gRPC-сервисы публикуются в корне | transcoding сохраняет пути `/v1/...`; следствие — двухсегментные inbound-маршруты отвечают `404` вместо `405` (ADR §15.2) |
@@ -338,10 +349,11 @@ Features/Management
 | `2026-10-29-inbound-dispatch` | `inbound-dispatch` (+ `inbound-routing`, `contract-registry`, `management-api`) | приём вызова, аутентификация, схемы тела, журнал `InboundMessageLog`, настройки версии контракта, миграция `AddInboundDispatch` |
 | `2026-10-31-outbound-client-certificate` | `outbound-dispatch` | `Infrastructure/Http` (пул `SocketsHttpHandler` по ключу канала), `IChannelCertificateStore`, авторизация `client_certificate` |
 | `2026-10-31-outbound-result-dispatcher` | `outbound-dispatch` | `OutboundResultDispatcher`, `StoredOutboundResultFactory`, адрес доставки и ревизия в журнале, индекс `pending`, миграция `AddOutboundResultDispatcher` |
-| `2026-10-31-inbound-operation-settings` | `contract-registry`, `inbound-routing`, `management-api` | настройки операции (`enabled`, очередь, квота), `PATCH .../operations/{operationId}`, отключённые маршруты `404` + аудит, миграция `AddContractOperationSettings` |
-| `2026-10-31-channel-health` | `management-api` | срез `GetChannelHealth`, RPC `GetChannelHealth` (`GET /v1/channels/{channel_name}/health`), `ChannelCertificateInfo` для диагностики сертификата, журнал `InboundMessageLog.ReceivedAtUnixMs`, индексы «канал + время» `(ChannelName, AtUnixMs)` в обоих журналах, миграции `AddInboundReceivedAtUnixMs`, `AddOutboundErrorIndex` |
+| `2026-10-31-inbound-operation-settings` | `contract-registry`, `inbound-routing`, `management-api` | настройки операции (`enabled`, очередь), `PATCH .../operations/{operationId}`, отключённые маршруты `404` + аудит, миграция `AddContractOperationSettings` |
+| `2026-10-31-channel-health` | `management-api` | срез `GetChannelHealth`, RPC `GetChannelHealth` (`GET /v1/channels/{channel_name}/health`), `ChannelCertificateInfo` для диагностики сертификата, индексы «канал + время» в обоих журналах, миграции `AddInboundReceivedAtUnixMs`, `AddOutboundErrorIndex` |
 | `2026-10-31-queue-naming` | `message-serialization`, `outbound-dispatch`, `contract-registry` | `QueueNames` (входная очередь `lti.gateway.outbound`, error-queue `lti.gateway.error`), вычисляемый адрес продукта `<product_id>.inbox`: регистрация и чтение маршрута (проблема `address`), проверка `rbs2-sender-address` и `rbs2-return-address`, формат очереди версии контракта при публикации (проблема `queue`) |
 | `2026-10-31-complete-management-api` | `management-api` | аудит чтения канала и отказов `NotFound`, выравнивание комментариев контракта и README |
+| `2026-10-31-fix-adr-deviations` | `outbound-dispatch`, `management-api`, `contract-registry`, `channel-registry`, `inbound-routing`, `gateway-host` | доставка отказа только на проверенный адрес (`Undeliverable`), `FailFastException` для невалидного DTO, `ProblemSeverity`, валидация management-команд, проверка секретов при старте, удаление квоты операции и Unix-колонок (миграции `RemoveContractOperationRateLimit`, `RemoveUnixTimestampColumns`) |
 
 ## 11. Поддержание актуальности
 
