@@ -11,7 +11,7 @@ public sealed partial class ManagementApiService
         RegisterProductRouteRequest request,
         ServerCallContext context)
     {
-        var result = await _registerProductRoute.HandleAsync(
+        var result = await registerProductRoute.HandleAsync(
             new ProductRoutes.RegisterProductRouteCommand(
                 request.ProductId,
                 request.AllowedChannels.ToArray(),
@@ -29,7 +29,7 @@ public sealed partial class ManagementApiService
         GetProductRouteRequest request,
         ServerCallContext context)
     {
-        var result = await _getProductRoute.HandleAsync(
+        var result = await getProductRoute.HandleAsync(
             new ProductRoutes.GetProductRouteQuery(request.ProductId),
             context.CancellationToken);
 
@@ -53,7 +53,7 @@ public sealed partial class ManagementApiService
         GetOutboundOperationRequest request,
         ServerCallContext context)
     {
-        var operation = await _db.OutboundOperations
+        var operation = await db.OutboundOperations
             .AsNoTracking()
             .SingleOrDefaultAsync(entity => entity.MessageId == request.MessageId, context.CancellationToken);
 
@@ -64,7 +64,7 @@ public sealed partial class ManagementApiService
             throw new RpcException(new Status(StatusCode.NotFound, "operation not found"));
         }
 
-        var log = await _db.OutboundMessageLogs
+        var log = await db.OutboundMessageLogs
             .AsNoTracking()
             .FirstOrDefaultAsync(entity => entity.MessageId == request.MessageId, context.CancellationToken);
 

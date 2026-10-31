@@ -10,7 +10,7 @@ public sealed partial class ManagementApiService
         UploadContractRequest request,
         ServerCallContext context)
     {
-        var result = await _uploadContractVersion.HandleAsync(
+        var result = await uploadContractVersion.HandleAsync(
             new Contracts.UploadContractVersionCommand(request.ChannelName, request.Document),
             context.CancellationToken);
 
@@ -21,7 +21,7 @@ public sealed partial class ManagementApiService
         PublishContractVersionRequest request,
         ServerCallContext context)
     {
-        var result = await _publishContractVersion.HandleAsync(
+        var result = await publishContractVersion.HandleAsync(
             new Contracts.PublishContractVersionCommand(request.ChannelName, request.Version),
             context.CancellationToken);
 
@@ -34,7 +34,7 @@ public sealed partial class ManagementApiService
         ActivateContractVersionRequest request,
         ServerCallContext context)
     {
-        var result = await _activateContractVersion.HandleAsync(
+        var result = await activateContractVersion.HandleAsync(
             new Contracts.ActivateContractVersionCommand(request.ChannelName, request.Version),
             context.CancellationToken);
 
@@ -47,7 +47,7 @@ public sealed partial class ManagementApiService
         ListContractOperationsRequest request,
         ServerCallContext context)
     {
-        var result = await _listContractOperations.HandleAsync(
+        var result = await listContractOperations.HandleAsync(
             new Contracts.ListContractOperationsQuery(request.ChannelName, request.Version),
             context.CancellationToken);
 
@@ -83,7 +83,7 @@ public sealed partial class ManagementApiService
     {
         var target = $"{request.ChannelName}:v{request.Version}";
 
-        var result = await _getContractVersion.HandleAsync(
+        var result = await getContractVersion.HandleAsync(
             new Contracts.GetContractVersionQuery(request.ChannelName, request.Version),
             context.CancellationToken);
 
@@ -123,6 +123,13 @@ public sealed partial class ManagementApiService
 
         if (problems.Count > 0)
         {
+            await AuditAsync(
+                "UpdateContractVersionSettings",
+                $"{request.ChannelName}:v{request.Version}",
+                false,
+                problems,
+                context.CancellationToken);
+
             return ToContractResponse(false, request.Version, null, problems, []);
         }
 
@@ -135,7 +142,7 @@ public sealed partial class ManagementApiService
             request.Settings.RateLimitPermit > 0 ? request.Settings.RateLimitPermit : null,
             request.Settings.RateLimitWindowSeconds > 0 ? request.Settings.RateLimitWindowSeconds : null);
 
-        var result = await _updateContractVersionSettings.HandleAsync(
+        var result = await updateContractVersionSettings.HandleAsync(
             new Contracts.UpdateContractVersionSettingsCommand(request.ChannelName, request.Version, settings),
             context.CancellationToken);
 
@@ -156,7 +163,7 @@ public sealed partial class ManagementApiService
             request.HasRateLimitPermit ? request.RateLimitPermit : null,
             request.HasRateLimitWindowSeconds ? request.RateLimitWindowSeconds : null);
 
-        var result = await _updateContractOperationSettings.HandleAsync(
+        var result = await updateContractOperationSettings.HandleAsync(
             new Contracts.UpdateContractOperationSettingsCommand(
                 request.ChannelName,
                 request.Version,

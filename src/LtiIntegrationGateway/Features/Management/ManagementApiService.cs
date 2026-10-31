@@ -14,72 +14,32 @@ namespace LtiIntegrationGateway.Features.Management;
 /// Управляющий API: тонкий адаптер над срезами. Доменные правила остаются в срезах, здесь —
 /// отображение proto-сообщений, коды gRPC и аудит управляющих операций.
 /// </summary>
-public sealed partial class ManagementApiService : ManagementService.ManagementServiceBase
+public sealed partial class ManagementApiService(
+    GatewayDbContext db,
+    CreateChannelHandler createChannel,
+    UpdateChannelDraftHandler updateChannelDraft,
+    PublishChannelRevisionHandler publishChannelRevision,
+    ActivateChannelRevisionHandler activateChannelRevision,
+    RollbackChannelRevisionHandler rollbackChannelRevision,
+    GetChannelHandler getChannel,
+    GetChannelHealthHandler getChannelHealth,
+    RegisterProductRouteHandler registerProductRoute,
+    GetProductRouteHandler getProductRoute,
+    UploadContractVersionHandler uploadContractVersion,
+    PublishContractVersionHandler publishContractVersion,
+    ActivateContractVersionHandler activateContractVersion,
+    ListContractOperationsHandler listContractOperations,
+    GetContractVersionHandler getContractVersion,
+    UpdateContractVersionSettingsHandler updateContractVersionSettings,
+    UpdateContractOperationSettingsHandler updateContractOperationSettings,
+    ManagementAuditWriter audit) : ManagementService.ManagementServiceBase
 {
-    private readonly GatewayDbContext _db;
-    private readonly CreateChannelHandler _createChannel;
-    private readonly UpdateChannelDraftHandler _updateChannelDraft;
-    private readonly PublishChannelRevisionHandler _publishChannelRevision;
-    private readonly ActivateChannelRevisionHandler _activateChannelRevision;
-    private readonly RollbackChannelRevisionHandler _rollbackChannelRevision;
-    private readonly GetChannelHandler _getChannel;
-    private readonly GetChannelHealthHandler _getChannelHealth;
-    private readonly RegisterProductRouteHandler _registerProductRoute;
-    private readonly GetProductRouteHandler _getProductRoute;
-    private readonly UploadContractVersionHandler _uploadContractVersion;
-    private readonly PublishContractVersionHandler _publishContractVersion;
-    private readonly ActivateContractVersionHandler _activateContractVersion;
-    private readonly ListContractOperationsHandler _listContractOperations;
-    private readonly GetContractVersionHandler _getContractVersion;
-    private readonly UpdateContractVersionSettingsHandler _updateContractVersionSettings;
-    private readonly UpdateContractOperationSettingsHandler _updateContractOperationSettings;
-    private readonly ManagementAuditWriter _audit;
-
-    public ManagementApiService(
-        GatewayDbContext db,
-        CreateChannelHandler createChannel,
-        UpdateChannelDraftHandler updateChannelDraft,
-        PublishChannelRevisionHandler publishChannelRevision,
-        ActivateChannelRevisionHandler activateChannelRevision,
-        RollbackChannelRevisionHandler rollbackChannelRevision,
-        GetChannelHandler getChannel,
-        GetChannelHealthHandler getChannelHealth,
-        RegisterProductRouteHandler registerProductRoute,
-        GetProductRouteHandler getProductRoute,
-        UploadContractVersionHandler uploadContractVersion,
-        PublishContractVersionHandler publishContractVersion,
-        ActivateContractVersionHandler activateContractVersion,
-        ListContractOperationsHandler listContractOperations,
-        GetContractVersionHandler getContractVersion,
-        UpdateContractVersionSettingsHandler updateContractVersionSettings,
-        UpdateContractOperationSettingsHandler updateContractOperationSettings,
-        ManagementAuditWriter audit)
-    {
-        _db = db;
-        _createChannel = createChannel;
-        _updateChannelDraft = updateChannelDraft;
-        _publishChannelRevision = publishChannelRevision;
-        _activateChannelRevision = activateChannelRevision;
-        _rollbackChannelRevision = rollbackChannelRevision;
-        _getChannel = getChannel;
-        _getChannelHealth = getChannelHealth;
-        _registerProductRoute = registerProductRoute;
-        _getProductRoute = getProductRoute;
-        _uploadContractVersion = uploadContractVersion;
-        _publishContractVersion = publishContractVersion;
-        _activateContractVersion = activateContractVersion;
-        _listContractOperations = listContractOperations;
-        _getContractVersion = getContractVersion;
-        _updateContractVersionSettings = updateContractVersionSettings;
-        _updateContractOperationSettings = updateContractOperationSettings;
-        _audit = audit;
-    }
 
     public override async Task<ListChannelsResponse> ListChannels(
         ListChannelsRequest request,
         ServerCallContext context)
     {
-        var channels = await _db.Channels
+        var channels = await db.Channels
             .AsNoTracking()
             .Include(channel => channel.Revisions).ThenInclude(revision => revision.AllowedMethods)
             .Include(channel => channel.Revisions).ThenInclude(revision => revision.AllowedPaths)
@@ -102,13 +62,17 @@ public sealed partial class ManagementApiService : ManagementService.ManagementS
         GetChannelRequest request,
         ServerCallContext context)
     {
-        var channelId = await RequireChannelIdAsync(request.ChannelName, context.CancellationToken);
-        var result = await _getChannel.HandleAsync(new GetChannelQuery(channelId), context.CancellationToken);
+        var channelId = await RequireChannelIdAsync("GetChannel", request.ChannelName, context.CancellationToken);
+        var result = await getChannel.HandleAsync(new GetChannelQuery(channelId), context.CancellationToken);
 
         if (result.Channel is null)
         {
+            await AuditAsync("GetChannel", request.ChannelName, false, result.Problems, context.CancellationToken);
+
             throw new RpcException(new Status(StatusCode.NotFound, "channel not found"));
         }
+
+        await AuditAsync("GetChannel", request.ChannelName, true, [], context.CancellationToken);
 
         return new GetChannelResponse { Channel = ChannelMapping.ToInfo(result.Channel) };
     }
@@ -127,14 +91,24 @@ public sealed partial class ManagementApiService : ManagementService.ManagementS
                 .ToArray());
     }
 
-    private async Task<Guid> RequireChannelIdAsync(string channelName, CancellationToken cancellationToken)
+    private async Task<Guid> RequireChannelIdAsync(
+        string operation,
+        string channelName,
+        CancellationToken cancellationToken)
     {
-        var channelId = await _db.Channels
+        var channelId = await db.Channels
             .Where(channel => channel.Name == channelName)
             .Select(channel => (Guid?)channel.Id)
             .SingleOrDefaultAsync(cancellationToken);
 
-        return channelId ?? throw new RpcException(new Status(StatusCode.NotFound, "channel not found"));
+        if (channelId is null)
+        {
+            await AuditAsync(operation, channelName, false, ["channel: канал не найден"], cancellationToken);
+
+            throw new RpcException(new Status(StatusCode.NotFound, "channel not found"));
+        }
+
+        return channelId.Value;
     }
 
     private static ChannelOperationResponse ToChannelResponse(
@@ -182,7 +156,7 @@ public sealed partial class ManagementApiService : ManagementService.ManagementS
         bool succeeded,
         IReadOnlyList<string> problems,
         CancellationToken cancellationToken) =>
-        _audit.RecordAsync(
+        audit.RecordAsync(
             operation,
             target,
             succeeded,

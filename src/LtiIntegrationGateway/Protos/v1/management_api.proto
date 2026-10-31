@@ -238,8 +238,9 @@ service ManagementService {
 message OperationProblem {
   // Код проблемы — префикс исходного сообщения проверки: channel, name, base_url, allowed_methods,
   // allowed_paths, retry_policy, config_key, auth_type, settings, revision, version, path, method,
-  // template, schema, ref, format, operation_id, conflict, operation. Устойчивый признак для
-  // программной обработки; текст проблемы может уточняться без смены контракта.
+  // template, schema, ref, format, operation_id, conflict, operation, queue, address, rate_limit.
+  // Устойчивый признак для программной обработки; текст проблемы может уточняться без смены
+  // контракта.
   string code = 1;
 
   // Человекочитаемое описание проблемы без значений секретов и без имён внутренних сущностей.
@@ -266,8 +267,9 @@ message ChannelSettings {
   // завершающего пути, например https://bank-a.example.
   string base_url = 1;
 
-  // Тип авторизации: none, bearer, api_key, basic, client_certificate. client_certificate пока не
-  // поддерживается рантаймом: запросы с этим типом отклоняются кодом AUTH_TYPE_UNSUPPORTED.
+  // Тип авторизации: none, bearer, api_key, basic или client_certificate. Значение секрета
+  // (токен, пароль, материал клиентского сертификата) в базе и в ответах API не хранится:
+  // задаётся только ключ конфигурации, по которому рантайм берёт секрет из окружения.
   string auth_type = 2;
 
   // Ключ конфигурации, по которому рантайм берёт значение секрета (например Secrets:BankA:Token).

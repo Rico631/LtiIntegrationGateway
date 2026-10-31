@@ -197,7 +197,7 @@ Features/Management
 | `OpenApi/OpenApiDocumentValidator` | fail-closed проверки, извлечение операций и схем тела | запрещённые ключевые слова, `$ref`, `format`; инлайнинг `$ref` до глубины 32 |
 | `OpenApi/InboundSchemaCache` | скомпилированные схемы активных ревизий | `NJsonSchema` 11.6.1, компиляция при активации |
 | `Management/ManagementApiKeyMiddleware` | ключ управляющего API | `401`/`503`, gRPC `Unauthenticated` |
-| `Management/ManagementAuditWriter` | аудит управляющих операций | без значений секретов; усечение объекта и деталей до длин модели |
+| `Management/ManagementAuditWriter` | аудит управляющих операций, включая чтение и отказы `NotFound` | без значений секретов; усечение объекта и деталей до длин модели |
 | `Security/ConfigurationSecretStore` | значение секрета по ключу | только `IConfiguration` |
 | `Security/ConfigurationChannelCertificateStore` | клиентский сертификат по `config_key` | PFX из файла или base64, пароль `<config_key>:Password`, кэш на время жизни процесса |
 | `Http/ChannelHttpClientPool` | пул `SocketsHttpHandler` по ключу канала | TLS 1.2+, без редиректов, проверка серверного сертификата, срок жизни соединения 5 минут |
@@ -341,6 +341,7 @@ Features/Management
 | `2026-10-31-inbound-operation-settings` | `contract-registry`, `inbound-routing`, `management-api` | настройки операции (`enabled`, очередь, квота), `PATCH .../operations/{operationId}`, отключённые маршруты `404` + аудит, миграция `AddContractOperationSettings` |
 | `2026-10-31-channel-health` | `management-api` | срез `GetChannelHealth`, RPC `GetChannelHealth` (`GET /v1/channels/{channel_name}/health`), `ChannelCertificateInfo` для диагностики сертификата, журнал `InboundMessageLog.ReceivedAtUnixMs`, индексы «канал + время» `(ChannelName, AtUnixMs)` в обоих журналах, миграции `AddInboundReceivedAtUnixMs`, `AddOutboundErrorIndex` |
 | `2026-10-31-queue-naming` | `message-serialization`, `outbound-dispatch`, `contract-registry` | `QueueNames` (входная очередь `lti.gateway.outbound`, error-queue `lti.gateway.error`), вычисляемый адрес продукта `<product_id>.inbox`: регистрация и чтение маршрута (проблема `address`), проверка `rbs2-sender-address` и `rbs2-return-address`, формат очереди версии контракта при публикации (проблема `queue`) |
+| `2026-10-31-complete-management-api` | `management-api` | аудит чтения канала и отказов `NotFound`, выравнивание комментариев контракта и README |
 
 ## 11. Поддержание актуальности
 

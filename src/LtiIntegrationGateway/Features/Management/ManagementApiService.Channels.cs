@@ -21,7 +21,7 @@ public sealed partial class ManagementApiService
             return ToChannelResponse(false, mappingProblems);
         }
 
-        var result = await _createChannel.HandleAsync(
+        var result = await createChannel.HandleAsync(
             new Channels.CreateChannelCommand(request.Name, configuration),
             context.CancellationToken);
 
@@ -36,7 +36,7 @@ public sealed partial class ManagementApiService
         UpdateChannelDraftRequest request,
         ServerCallContext context)
     {
-        var channelId = await RequireChannelIdAsync(request.ChannelName, context.CancellationToken);
+        var channelId = await RequireChannelIdAsync("UpdateChannelDraft", request.ChannelName, context.CancellationToken);
         var configuration = ChannelMapping.ToConfiguration(request.Settings, out var mappingProblems);
 
         if (mappingProblems.Count > 0)
@@ -46,7 +46,7 @@ public sealed partial class ManagementApiService
             return ToChannelResponse(false, mappingProblems, channelId);
         }
 
-        var result = await _updateChannelDraft.HandleAsync(
+        var result = await updateChannelDraft.HandleAsync(
             new Channels.UpdateChannelDraftCommand(channelId, Optional(request.Revision), configuration),
             context.CancellationToken);
 
@@ -61,9 +61,9 @@ public sealed partial class ManagementApiService
         PublishChannelRevisionRequest request,
         ServerCallContext context)
     {
-        var channelId = await RequireChannelIdAsync(request.ChannelName, context.CancellationToken);
+        var channelId = await RequireChannelIdAsync("PublishChannelRevision", request.ChannelName, context.CancellationToken);
 
-        var result = await _publishChannelRevision.HandleAsync(
+        var result = await publishChannelRevision.HandleAsync(
             new Channels.PublishChannelRevisionCommand(channelId, Optional(request.Revision)),
             context.CancellationToken);
 
@@ -78,9 +78,9 @@ public sealed partial class ManagementApiService
         ActivateChannelRevisionRequest request,
         ServerCallContext context)
     {
-        var channelId = await RequireChannelIdAsync(request.ChannelName, context.CancellationToken);
+        var channelId = await RequireChannelIdAsync("ActivateChannelRevision", request.ChannelName, context.CancellationToken);
 
-        var result = await _activateChannelRevision.HandleAsync(
+        var result = await activateChannelRevision.HandleAsync(
             new Channels.ActivateChannelRevisionCommand(channelId, request.Revision),
             context.CancellationToken);
 
@@ -95,9 +95,9 @@ public sealed partial class ManagementApiService
         RollbackChannelRevisionRequest request,
         ServerCallContext context)
     {
-        var channelId = await RequireChannelIdAsync(request.ChannelName, context.CancellationToken);
+        var channelId = await RequireChannelIdAsync("RollbackChannelRevision", request.ChannelName, context.CancellationToken);
 
-        var result = await _rollbackChannelRevision.HandleAsync(
+        var result = await rollbackChannelRevision.HandleAsync(
             new Channels.RollbackChannelRevisionCommand(channelId),
             context.CancellationToken);
 
@@ -112,7 +112,7 @@ public sealed partial class ManagementApiService
         GetChannelHealthRequest request,
         ServerCallContext context)
     {
-        var result = await _getChannelHealth.HandleAsync(
+        var result = await getChannelHealth.HandleAsync(
             new GetChannelHealthQuery(request.ChannelName),
             context.CancellationToken);
 

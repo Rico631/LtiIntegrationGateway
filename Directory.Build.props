@@ -16,7 +16,7 @@
 
     <!-- Warnings -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <WarningsNotAsErrors>$(WarningsNotAsErrors);IDE0290</WarningsNotAsErrors>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors)</WarningsNotAsErrors>
 
     <!-- Compiler -->
     <Deterministic>true</Deterministic>
