@@ -174,10 +174,7 @@ public sealed class GetChannelHealthHandler(
         string channelName,
         CancellationToken cancellationToken)
     {
-        // SQLite не поддерживает ORDER BY по DateTimeOffset, поэтому последние записи выбираются
-        // в SQL по Unix-миллисекундам: оба журнала читаются по индексу «канал + время»
-        // ((ChannelName, CreatedAtUnixMs) и (ChannelName, ReceivedAtUnixMs)). В памяти сортируется
-        // только объединение двух направлений.
+
         var outbound = await db.OutboundMessageLogs
             .AsNoTracking()
             .Where(log => log.ChannelName == channelName && log.ErrorCode != null)

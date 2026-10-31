@@ -31,7 +31,7 @@ public sealed class ProcessOutboundRequestHandler(
 
         var request = command.Request;
 
-        var problems = MessageContractValidator.ValidateOutboundRequest(request).ToList();
+        var problems = MessageContractValidator.ValidateOutboundRequest(request);
 
         if (problems.Count > 0)
         {

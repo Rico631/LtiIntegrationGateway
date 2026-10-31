@@ -3,7 +3,9 @@
     <File Path=".editorconfig" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/LtiIntegrationGateway/LtiIntegrationGateway.csproj" Id="3bdfe336-0361-4937-a613-1ec34a0d4f6d" />
+  </Folder>
+  <Folder Name="/tests/">
     <Project Path="src/LtiIntegrationGateway.Tests/LtiIntegrationGateway.Tests.csproj" />
   </Folder>
-  <Project Path="src/LtiIntegrationGateway/LtiIntegrationGateway.csproj" Id="3bdfe336-0361-4937-a613-1ec34a0d4f6d" />
 </Solution>
