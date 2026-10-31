@@ -1,7 +1,8 @@
 using System.Net;
 using LtiIntegrationGateway.Contracts.Messages.V1;
 using LtiIntegrationGateway.Features.Outbound;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Outbound;
 using LtiIntegrationGateway.Tests.TestSupport;
 using Microsoft.EntityFrameworkCore;
 
@@ -191,8 +192,10 @@ public class OutboundResultReplayTests
         await fixture.CreateActiveChannelAsync();
         await fixture.RegisterProductAsync();
 
-        // Отказ канала по пути: повтор не должен заново проходить проверки канала.
-        var request = OutboundFixture.CreateRequest("msg-refused", relativePath: "/api/admin");
+        // Структурный отказ по пути: повтор не должен заново проходить проверки канала.
+        var request = OutboundFixture.CreateRequest(
+            "msg-refused",
+            relativePath: "https://evil.example/api/admin");
 
         using (var db = fixture.CreateDb())
         {
@@ -213,7 +216,7 @@ public class OutboundResultReplayTests
         await Assert.That(deliveredFirst.Outcome).IsEqualTo(Outcome.GatewayRefused);
         await Assert.That(replayed.Outcome).IsEqualTo(Outcome.GatewayRefused);
         await Assert.That(replayed.ErrorCode).IsEqualTo(OutboundErrorCodes.PathNotAllowed);
-        await Assert.That(replayed.ErrorMessage).IsEqualTo("путь не разрешён каналом");
+        await Assert.That(replayed.ErrorMessage).IsEqualTo("путь недопустим");
         await Assert.That(replayed.AttemptCount).IsEqualTo(0);
         await Assert.That(ContractJson.Serialize(replayed)).IsEqualTo(ContractJson.Serialize(deliveredFirst));
     }

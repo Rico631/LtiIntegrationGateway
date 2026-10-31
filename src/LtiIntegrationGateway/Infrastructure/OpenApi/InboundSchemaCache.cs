@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json.Nodes;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts;
 using NJsonSchema;
 
 namespace LtiIntegrationGateway.Infrastructure.OpenApi;

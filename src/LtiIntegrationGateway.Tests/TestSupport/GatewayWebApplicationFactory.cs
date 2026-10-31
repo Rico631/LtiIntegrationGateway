@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
 using TUnit.Core.Interfaces;
 
@@ -17,14 +19,17 @@ public sealed class GatewayWebApplicationFactory : WebApplicationFactory<Program
     private readonly IReadOnlyDictionary<string, string?> _extraSettings;
     private readonly string? _connectionString;
     private readonly SqliteConnection? _keepAliveConnection;
+    private readonly IHealthCheck? _extraReadinessCheck;
 
     private GatewayWebApplicationFactory(
         bool supplyConnectionString,
         IReadOnlyDictionary<string, string?>? extraSettings = null,
-        string? connectionString = null)
+        string? connectionString = null,
+        IHealthCheck? extraReadinessCheck = null)
     {
         _supplyConnectionString = supplyConnectionString;
         _extraSettings = extraSettings ?? new Dictionary<string, string?>();
+        _extraReadinessCheck = extraReadinessCheck;
 
         if (!supplyConnectionString)
         {
@@ -55,6 +60,10 @@ public sealed class GatewayWebApplicationFactory : WebApplicationFactory<Program
         new(true, settings, connectionString);
 
     public static GatewayWebApplicationFactory WithoutStorage() => new(false);
+
+    /// <summary>Хост с дополнительной readiness-проверкой, которая всегда возвращает отказ.</summary>
+    public static GatewayWebApplicationFactory WithUnhealthyReadiness(IHealthCheck check) =>
+        new(true, extraReadinessCheck: check);
 
     public Task InitializeAsync()
     {
@@ -92,6 +101,13 @@ public sealed class GatewayWebApplicationFactory : WebApplicationFactory<Program
         });
 
         builder.ConfigureLogging(logging => logging.AddProvider(Logging));
+
+        if (_extraReadinessCheck is not null)
+        {
+            builder.ConfigureServices(services => services
+                .AddHealthChecks()
+                .AddCheck("test-unhealthy", _extraReadinessCheck, tags: ["ready"]));
+        }
     }
 
     protected override void Dispose(bool disposing)

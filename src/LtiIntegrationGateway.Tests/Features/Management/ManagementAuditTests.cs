@@ -3,7 +3,7 @@ using Grpc.Core;
 using LtiIntegrationGateway.Contracts.Management.V1;
 using LtiIntegrationGateway.Infrastructure.Management;
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Management;
 using LtiIntegrationGateway.Tests.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using ProtoRetryRule = LtiIntegrationGateway.Contracts.Management.V1.RetryRule;
@@ -22,8 +22,6 @@ public class ManagementAuditTests
         PerAttemptTimeoutMs = 5000,
         OverallCapMs = 30000,
         RetryPolicy = { new ProtoRetryRule { Match = "transport_error", DelaysMs = { 100 } } },
-        AllowedMethods = { "GET" },
-        AllowedPaths = { "/api/contracts" },
     };
 
     private static async Task CreateChannelAsync(GatewayWebApplicationFactory factory)

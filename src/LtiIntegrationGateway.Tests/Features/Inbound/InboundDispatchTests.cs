@@ -1,4 +1,4 @@
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Inbound;
 using LtiIntegrationGateway.Tests.TestSupport;
 using Microsoft.AspNetCore.Http;
 

@@ -4,10 +4,12 @@ using System.Text;
 using System.Text.Json;
 using Grpc.Core;
 using LtiIntegrationGateway.Contracts.Management.V1;
-using LtiIntegrationGateway.Features.Channels;
+using LtiIntegrationGateway.Features.Channels.GetChannelHealth;
 using LtiIntegrationGateway.Infrastructure.Management;
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Inbound;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Outbound;
 using LtiIntegrationGateway.Tests.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 

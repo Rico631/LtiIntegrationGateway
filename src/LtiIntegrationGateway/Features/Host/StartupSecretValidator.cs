@@ -1,5 +1,6 @@
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts;
 using LtiIntegrationGateway.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 

@@ -1,5 +1,6 @@
 using LtiIntegrationGateway.Features.ProductRoutes;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Features.ProductRoutes.GetProductRoute;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRoutes;
 using LtiIntegrationGateway.Tests.TestSupport;
 using Microsoft.EntityFrameworkCore;
 

@@ -1,10 +1,12 @@
+using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Google.Protobuf.WellKnownTypes;
 using LtiIntegrationGateway.Contracts.Messages.V1;
+using LtiIntegrationGateway.Infrastructure.Observability;
 using LtiIntegrationGateway.Infrastructure.OpenApi;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Inbound;
 using LtiIntegrationGateway.Infrastructure.Routing;
 
 namespace LtiIntegrationGateway.Features.Inbound;
@@ -18,19 +20,67 @@ public sealed class InboundRequestHandler(
     InboundSchemaCache schemaCache,
     InboundMessageLogWriter journal,
     IInboundMessagePublisher publisher,
-    ILogger<InboundRequestHandler> logger)
+    ILogger<InboundRequestHandler> logger,
+    GatewayMetrics metrics)
 {
+    private const string ErrorCodeItemKey = "LtiIntegrationGateway.Telemetry.ErrorCode";
+
     /// <summary>Максимальное количество query-параметров в запросе.</summary>
     public const int MaxQueryParameters = 64;
 
     /// <summary>Максимальная глубина JSON в теле запроса.</summary>
     public const int MaxJsonDepth = 64;
 
+    /// <summary>Обрабатывает входящий вызов и записывает безопасную телеметрию операции.</summary>
     public async Task HandleAsync(HttpContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
         var route = context.GetEndpoint()?.Metadata.GetMetadata<InboundRouteMetadata>();
+
+        if (route is null)
+        {
+            await HandleCoreAsync(context, null);
+
+            return;
+        }
+
+        var method = context.Request.Method;
+        var template = (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText ?? string.Empty;
+        var started = Stopwatch.GetTimestamp();
+
+        using var activity = GatewayTelemetry.StartActivity(GatewayTelemetry.InboundRequestActivity);
+        GatewayTelemetry.SetTag(activity, GatewayTelemetry.DirectionTag, GatewayTelemetry.InboundDirection);
+        GatewayTelemetry.SetTag(activity, GatewayTelemetry.ChannelTag, route.ChannelName);
+        GatewayTelemetry.SetTag(activity, GatewayTelemetry.HttpMethodTag, method);
+        GatewayTelemetry.SetTag(activity, GatewayTelemetry.HttpRouteTag, template);
+        GatewayTelemetry.SetTag(activity, GatewayTelemetry.UrlPathTag, InboundRequestPath.Get(context));
+        GatewayTelemetry.SetTag(activity, GatewayTelemetry.OperationIdTag, route.OperationId);
+
+        try
+        {
+            await HandleCoreAsync(context, route);
+        }
+        finally
+        {
+            var statusCode = context.Response.StatusCode;
+            var errorCode = context.Items.TryGetValue(ErrorCodeItemKey, out var item) ? item as string : null;
+
+            GatewayTelemetry.SetTag(activity, GatewayTelemetry.HttpStatusCodeTag, statusCode);
+
+            metrics.RecordInbound(
+                route.ChannelName,
+                method,
+                template,
+                statusCode,
+                errorCode,
+                Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        }
+    }
+
+    private async Task HandleCoreAsync(HttpContext context, InboundRouteMetadata? route)
+    {
+        route ??= context.GetEndpoint()?.Metadata.GetMetadata<InboundRouteMetadata>();
 
         if (route is null)
         {
@@ -174,6 +224,8 @@ public sealed class InboundRequestHandler(
 
         if (entryId is null)
         {
+            SetErrorCode(context, "storage");
+
             await WriteStatusAsync(context, StatusCodes.Status503ServiceUnavailable);
 
             return;
@@ -197,6 +249,7 @@ public sealed class InboundRequestHandler(
                 template);
 
             await journal.UpdateStatusAsync(entryId, InboundDeliveryStatus.Failed, "delivery", CancellationToken.None);
+            SetErrorCode(context, "delivery");
 
             await WriteStatusAsync(context, StatusCodes.Status503ServiceUnavailable);
         }
@@ -211,6 +264,8 @@ public sealed class InboundRequestHandler(
         int statusCode,
         string errorCode)
     {
+        SetErrorCode(context, SafeErrorCode(errorCode));
+
         await journal.AppendAsync(
             () => CreateEntry(
                 message: null,
@@ -320,5 +375,18 @@ public sealed class InboundRequestHandler(
         context.Response.StatusCode = statusCode;
 
         return Task.CompletedTask;
+    }
+
+    private static string SafeErrorCode(string errorCode)
+    {
+        var separator = errorCode.IndexOf(':', StringComparison.Ordinal);
+
+        return separator < 0 ? errorCode : errorCode[..separator];
+    }
+
+    private static void SetErrorCode(HttpContext context, string errorCode)
+    {
+        context.Items[ErrorCodeItemKey] = errorCode;
+        GatewayTelemetry.SetTag(Activity.Current, GatewayTelemetry.ErrorCodeTag, errorCode);
     }
 }

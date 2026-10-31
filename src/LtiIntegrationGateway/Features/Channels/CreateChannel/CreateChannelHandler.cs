@@ -1,8 +1,8 @@
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
 using Microsoft.EntityFrameworkCore;
 
-namespace LtiIntegrationGateway.Features.Channels;
+namespace LtiIntegrationGateway.Features.Channels.CreateChannel;
 
 /// <summary>Создание канала: канал появляется вместе с черновиком ревизии.</summary>
 public sealed record CreateChannelCommand(string Name, ChannelConfiguration Configuration);

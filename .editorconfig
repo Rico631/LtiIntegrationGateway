@@ -49,7 +49,7 @@ csharp_space_before_comma = false
 csharp_space_after_semicolon_in_for_statement = true
 csharp_space_before_semicolon_in_for_statement = false
 
-csharp_preserve_single_line_blocks = false
+csharp_preserve_single_line_blocks = true
 csharp_preserve_single_line_statements = false
 
 # ------------------------------------------------------------
@@ -105,7 +105,7 @@ csharp_style_prefer_null_check_over_type_check = true:suggestion
 csharp_style_conditional_delegate_call = true:suggestion
 csharp_style_throw_expression = true:suggestion
 csharp_style_coalesce_expression = true:suggestion
-csharp_style_null_propagation = true:suggestion
+csharp_style_null_propagation = true:warning
 csharp_style_prefer_null_check_over_type_check = true:suggestion
 
 # Other
@@ -128,7 +128,7 @@ dotnet_style_prefer_inferred_tuple_names = true:suggestion
 dotnet_style_prefer_inferred_anonymous_type_member_names = true:suggestion
 
 dotnet_style_coalesce_expression = true:suggestion
-dotnet_style_null_propagation = true:suggestion
+dotnet_style_null_propagation = true:warning
 dotnet_style_prefer_is_null_check_over_reference_equality_method = true:suggestion
 
 dotnet_style_readonly_field = true:suggestion
@@ -212,6 +212,9 @@ dotnet_naming_style.camel_case.capitalization = camel_case
 
 # Primary constructors: Warning
 dotnet_diagnostic.IDE0290.severity = warning
+
+# Null propagation: Warning
+dotnet_diagnostic.IDE0031.severity = warning
 
 # Unnecessary usings
 dotnet_diagnostic.IDE0005.severity = warning

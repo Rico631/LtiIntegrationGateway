@@ -1,7 +1,8 @@
+using LtiIntegrationGateway.Features.Contracts.ListContractOperations;
 using LtiIntegrationGateway.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
-namespace LtiIntegrationGateway.Features.Contracts;
+namespace LtiIntegrationGateway.Features.Contracts.GetContractVersion;
 
 /// <summary>Чтение версии контракта вместе с настройками и операциями.</summary>
 public sealed record GetContractVersionQuery(string ChannelName, int Version);

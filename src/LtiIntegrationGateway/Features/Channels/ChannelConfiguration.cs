@@ -1,4 +1,4 @@
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
 
 namespace LtiIntegrationGateway.Features.Channels;
 
@@ -11,9 +11,7 @@ public sealed record ChannelConfiguration(
     string? UserName,
     int PerAttemptTimeoutMs,
     int OverallCapMs,
-    RetryPolicy RetryPolicy,
-    IReadOnlyList<string> AllowedMethods,
-    IReadOnlyList<string> AllowedPaths)
+    RetryPolicy RetryPolicy)
 {
     public static ChannelConfiguration Empty { get; } = new(
         BaseUrl: string.Empty,
@@ -23,7 +21,5 @@ public sealed record ChannelConfiguration(
         UserName: null,
         PerAttemptTimeoutMs: 0,
         OverallCapMs: 0,
-        RetryPolicy: RetryPolicy.Empty,
-        AllowedMethods: [],
-        AllowedPaths: []);
+        RetryPolicy: RetryPolicy.Empty);
 }

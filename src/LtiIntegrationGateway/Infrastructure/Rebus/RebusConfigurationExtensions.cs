@@ -40,5 +40,6 @@ public static class RebusConfigurationExtensions
         ArgumentNullException.ThrowIfNull(options);
 
         options.RetryStrategy(errorQueueName: QueueNames.ErrorQueue);
+        options.EnableDiagnosticSources();
     }
 }

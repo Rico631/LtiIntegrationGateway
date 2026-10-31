@@ -1,4 +1,4 @@
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts;
 using LtiIntegrationGateway.Infrastructure.Routing;
 
 namespace LtiIntegrationGateway.Features.Contracts;

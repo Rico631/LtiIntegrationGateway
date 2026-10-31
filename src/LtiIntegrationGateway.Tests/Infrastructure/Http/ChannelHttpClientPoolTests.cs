@@ -1,7 +1,7 @@
 using System.Security.Authentication;
 using System.Security.Cryptography;
 using LtiIntegrationGateway.Infrastructure.Http;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
 using LtiIntegrationGateway.Tests.TestSupport;
 
 namespace LtiIntegrationGateway.Tests.Infrastructure.Http;

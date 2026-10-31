@@ -1,4 +1,5 @@
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Inbound;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Outbound;
 using LtiIntegrationGateway.Tests.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -46,6 +47,12 @@ public class GatewayDbContextTests
 
         await Assert.That(outbound.CreatedAt.ToUnixTimeMilliseconds()).IsEqualTo(unixMilliseconds);
         await Assert.That(inbound.ReceivedAt.ToUnixTimeMilliseconds()).IsEqualTo(unixMilliseconds);
+
+        var allowedTables = await database.CountAsync(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' " +
+            "AND name IN ('ChannelAllowedMethods', 'ChannelAllowedPaths')");
+
+        await Assert.That(allowedTables).IsEqualTo(0);
     }
 
     [Test]

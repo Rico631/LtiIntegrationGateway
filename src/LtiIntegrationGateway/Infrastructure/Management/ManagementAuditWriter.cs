@@ -1,5 +1,5 @@
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Management;
 
 namespace LtiIntegrationGateway.Infrastructure.Management;
 

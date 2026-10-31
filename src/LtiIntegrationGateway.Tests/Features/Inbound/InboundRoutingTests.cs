@@ -1,6 +1,6 @@
 using System.Net;
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Inbound;
 using LtiIntegrationGateway.Infrastructure.Routing;
 using LtiIntegrationGateway.Tests.TestSupport;
 using Microsoft.EntityFrameworkCore;

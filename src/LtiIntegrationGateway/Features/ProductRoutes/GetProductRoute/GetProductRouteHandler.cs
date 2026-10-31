@@ -2,7 +2,7 @@ using LtiIntegrationGateway.Infrastructure.Persistence;
 using LtiIntegrationGateway.Infrastructure.Rebus;
 using Microsoft.EntityFrameworkCore;
 
-namespace LtiIntegrationGateway.Features.ProductRoutes;
+namespace LtiIntegrationGateway.Features.ProductRoutes.GetProductRoute;
 
 /// <summary>Чтение маршрута продукта.</summary>
 public sealed record GetProductRouteQuery(string ProductId);

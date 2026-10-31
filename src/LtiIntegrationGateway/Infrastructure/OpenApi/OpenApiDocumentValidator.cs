@@ -122,68 +122,68 @@ internal static class OpenApiDocumentValidator
         switch (node)
         {
             case JsonObject jsonObject:
-            {
-                if (jsonObject["$ref"] is JsonValue referenceValue &&
-                    referenceValue.TryGetValue<string>(out var reference) &&
-                    reference.StartsWith("#/", StringComparison.Ordinal))
                 {
-                    if (!references.Add(reference))
+                    if (jsonObject["$ref"] is JsonValue referenceValue &&
+                        referenceValue.TryGetValue<string>(out var reference) &&
+                        reference.StartsWith("#/", StringComparison.Ordinal))
                     {
-                        problems.Add($"schema: циклическая ссылка '{reference}' ({path})");
+                        if (!references.Add(reference))
+                        {
+                            problems.Add($"schema: циклическая ссылка '{reference}' ({path})");
 
-                        return null;
-                    }
+                            return null;
+                        }
 
-                    var target = ResolvePointer(root, reference);
+                        var target = ResolvePointer(root, reference);
 
-                    if (target is null)
-                    {
+                        if (target is null)
+                        {
+                            references.Remove(reference);
+                            problems.Add($"ref: '{reference}' не найдена в документе ({path})");
+
+                            return null;
+                        }
+
+                        var inlined = InlineReferences(
+                            target.DeepClone(),
+                            root,
+                            depth + 1,
+                            references,
+                            problems,
+                            $"{path}->{reference}");
+
                         references.Remove(reference);
-                        problems.Add($"ref: '{reference}' не найдена в документе ({path})");
 
-                        return null;
+                        return inlined;
                     }
 
-                    var inlined = InlineReferences(
-                        target.DeepClone(),
-                        root,
-                        depth + 1,
-                        references,
-                        problems,
-                        $"{path}->{reference}");
+                    var result = new JsonObject();
 
-                    references.Remove(reference);
+                    foreach (var property in jsonObject)
+                    {
+                        result[property.Key] = InlineReferences(
+                            property.Value?.DeepClone(),
+                            root,
+                            depth,
+                            references,
+                            problems,
+                            $"{path}.{property.Key}");
+                    }
 
-                    return inlined;
+                    return result;
                 }
-
-                var result = new JsonObject();
-
-                foreach (var property in jsonObject)
-                {
-                    result[property.Key] = InlineReferences(
-                        property.Value?.DeepClone(),
-                        root,
-                        depth,
-                        references,
-                        problems,
-                        $"{path}.{property.Key}");
-                }
-
-                return result;
-            }
 
             case JsonArray jsonArray:
-            {
-                var result = new JsonArray();
-
-                foreach (var item in jsonArray)
                 {
-                    result.Add(InlineReferences(item?.DeepClone(), root, depth, references, problems, path));
-                }
+                    var result = new JsonArray();
 
-                return result;
-            }
+                    foreach (var item in jsonArray)
+                    {
+                        result.Add(InlineReferences(item?.DeepClone(), root, depth, references, problems, path));
+                    }
+
+                    return result;
+                }
 
             default:
                 return node.DeepClone();

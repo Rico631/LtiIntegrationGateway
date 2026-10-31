@@ -2,7 +2,12 @@ using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using LtiIntegrationGateway.Contracts;
 using LtiIntegrationGateway.Contracts.Management.V1;
-using LtiIntegrationGateway.Features.Channels;
+using LtiIntegrationGateway.Features.Channels.ActivateChannelRevision;
+using LtiIntegrationGateway.Features.Channels.CreateChannel;
+using LtiIntegrationGateway.Features.Channels.GetChannelHealth;
+using LtiIntegrationGateway.Features.Channels.PublishChannelRevision;
+using LtiIntegrationGateway.Features.Channels.RollbackChannelRevision;
+using LtiIntegrationGateway.Features.Channels.UpdateChannelDraft;
 
 namespace LtiIntegrationGateway.Features.Management;
 
@@ -32,7 +37,7 @@ public sealed partial class ManagementApiService
         }
 
         var result = await createChannel.HandleAsync(
-            new Channels.CreateChannelCommand(request.Name, configuration),
+            new CreateChannelCommand(request.Name, configuration),
             context.CancellationToken);
 
         var succeeded = result.Problems.Count == 0;
@@ -75,7 +80,7 @@ public sealed partial class ManagementApiService
         }
 
         var result = await updateChannelDraft.HandleAsync(
-            new Channels.UpdateChannelDraftCommand(channelId, Optional(request.Revision), configuration),
+            new UpdateChannelDraftCommand(channelId, Optional(request.Revision), configuration),
             context.CancellationToken);
 
         var succeeded = result.Problems.Count == 0;
@@ -101,7 +106,7 @@ public sealed partial class ManagementApiService
         var channelId = await RequireChannelIdAsync("PublishChannelRevision", request.ChannelName, context.CancellationToken);
 
         var result = await publishChannelRevision.HandleAsync(
-            new Channels.PublishChannelRevisionCommand(channelId, Optional(request.Revision)),
+            new PublishChannelRevisionCommand(channelId, Optional(request.Revision)),
             context.CancellationToken);
 
         var succeeded = result.Problems.Count == 0;
@@ -127,7 +132,7 @@ public sealed partial class ManagementApiService
         var channelId = await RequireChannelIdAsync("ActivateChannelRevision", request.ChannelName, context.CancellationToken);
 
         var result = await activateChannelRevision.HandleAsync(
-            new Channels.ActivateChannelRevisionCommand(channelId, request.Revision),
+            new ActivateChannelRevisionCommand(channelId, request.Revision),
             context.CancellationToken);
 
         var succeeded = result.Problems.Count == 0;
@@ -153,7 +158,7 @@ public sealed partial class ManagementApiService
         var channelId = await RequireChannelIdAsync("RollbackChannelRevision", request.ChannelName, context.CancellationToken);
 
         var result = await rollbackChannelRevision.HandleAsync(
-            new Channels.RollbackChannelRevisionCommand(channelId),
+            new RollbackChannelRevisionCommand(channelId),
             context.CancellationToken);
 
         var succeeded = result.Problems.Count == 0;

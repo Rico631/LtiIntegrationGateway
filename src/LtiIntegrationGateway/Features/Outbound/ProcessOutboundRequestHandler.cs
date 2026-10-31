@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using Google.Protobuf;
 using LtiIntegrationGateway.Contracts;
 using LtiIntegrationGateway.Contracts.Messages.V1;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Observability;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Outbound;
 
 namespace LtiIntegrationGateway.Features.Outbound;
 
@@ -13,6 +15,19 @@ public sealed record ProcessOutboundRequestCommand(
 
 public sealed record ProcessOutboundRequestResult(bool Completed, IReadOnlyList<string> Problems);
 
+/// <summary>Состояние телеметрии операции, не зависящее от сэмплирования traces.</summary>
+internal sealed class OutboundTelemetryState
+{
+    /// <summary>Исход операции.</summary>
+    public string Outcome { get; set; } = OutcomeNames.GatewayRefused;
+
+    /// <summary>Безопасный код ошибки.</summary>
+    public string? ErrorCode { get; set; }
+
+    /// <summary>Количество выполненных попыток.</summary>
+    public int AttemptCount { get; set; }
+}
+
 /// <summary>Обработка исходящего запроса: проверки, вызов, фиксация и доставка результата.</summary>
 public sealed class ProcessOutboundRequestHandler(
     ResolveSenderIdentityHandler identityResolver,
@@ -21,20 +36,71 @@ public sealed class ProcessOutboundRequestHandler(
     ExecuteHttpCallHandler httpCaller,
     OutboundOperationRecorder recorder,
     StoredOutboundResultFactory resultFactory,
-    PublishOutboundResultHandler publisher)
+    PublishOutboundResultHandler publisher,
+    GatewayMetrics metrics)
 {
+    private static readonly AsyncLocal<OutboundTelemetryState?> CurrentTelemetry = new();
+
     public async Task<ProcessOutboundRequestResult> HandleAsync(
         ProcessOutboundRequestCommand command,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);
 
+        var stopwatch = Stopwatch.StartNew();
+        using var activity = GatewayTelemetry.StartActivity(GatewayTelemetry.OutboundOperationActivity);
+        var telemetry = new OutboundTelemetryState();
+
+        GatewayTelemetry.SetTag(activity, GatewayTelemetry.DirectionTag, GatewayTelemetry.OutboundDirection);
+        GatewayTelemetry.SetTag(activity, GatewayTelemetry.MessageIdTag, command.Request.MessageId);
+        GatewayTelemetry.SetTag(activity, GatewayTelemetry.CorrelationIdTag, command.Request.CorrelationId);
+        GatewayTelemetry.SetTag(activity, GatewayTelemetry.ProductIdTag, command.Request.ProductId);
+        GatewayTelemetry.SetTag(activity, GatewayTelemetry.ChannelTag, command.Request.ChannelName);
+        GatewayTelemetry.SetTag(activity, GatewayTelemetry.HttpMethodTag, command.Request.HttpMethod);
+        GatewayTelemetry.SetTag(activity, GatewayTelemetry.UrlPathTag, command.Request.RelativePath);
+
+        CurrentTelemetry.Value = telemetry;
+        ProcessOutboundRequestResult result;
+
+        try
+        {
+            result = await HandleCoreAsync(command, telemetry, cancellationToken);
+        }
+        finally
+        {
+            CurrentTelemetry.Value = null;
+        }
+
+        metrics.RecordOutbound(
+            command.Request.ProductId,
+            command.Request.ChannelName,
+            telemetry.Outcome,
+            telemetry.ErrorCode,
+            stopwatch.Elapsed.TotalMilliseconds,
+            telemetry.AttemptCount);
+
+        return result;
+    }
+
+    private async Task<ProcessOutboundRequestResult> HandleCoreAsync(
+        ProcessOutboundRequestCommand command,
+        OutboundTelemetryState telemetry,
+        CancellationToken cancellationToken)
+    {
         var request = command.Request;
 
         var problems = MessageContractValidator.ValidateOutboundRequest(request);
 
         if (problems.Count > 0)
         {
+            telemetry.Outcome = OutcomeNames.GatewayRefused;
+            telemetry.ErrorCode = "validation";
+            telemetry.AttemptCount = 0;
+
+            GatewayTelemetry.SetTag(Activity.Current, GatewayTelemetry.OutcomeTag, OutcomeNames.GatewayRefused);
+            GatewayTelemetry.SetTag(Activity.Current, GatewayTelemetry.ErrorCodeTag, "validation");
+            GatewayTelemetry.SetTag(Activity.Current, GatewayTelemetry.AttemptCountTag, 0);
+
             return new ProcessOutboundRequestResult(false, problems);
         }
 
@@ -61,11 +127,11 @@ public sealed class ProcessOutboundRequestHandler(
             request.ChannelName,
             cancellationToken);
 
-        if (identity.ErrorCode is not null)
+        if (!identity.IsSuccess)
         {
             return await RefuseAsync(
                 command,
-                identity.ErrorCode,
+                identity.ErrorCode!,
                 identity.ErrorMessage,
                 deliverResult: false,
                 existing,
@@ -73,7 +139,7 @@ public sealed class ProcessOutboundRequestHandler(
         }
 
         if (string.IsNullOrWhiteSpace(command.ReturnAddress) ||
-            !identity.AllowedAddresses.Contains(command.ReturnAddress, StringComparer.Ordinal))
+            !identity.Value!.AllowedAddresses.Contains(command.ReturnAddress, StringComparer.Ordinal))
         {
             return await RefuseAsync(
                 command,
@@ -101,28 +167,16 @@ public sealed class ProcessOutboundRequestHandler(
                 $"у канала '{request.ChannelName}' нет активной ревизии",
                 deliverResult: true,
                 existing,
-                cancellationToken);
-        }
-
-        if (!channel.AllowedMethods.Contains(request.HttpMethod, StringComparer.OrdinalIgnoreCase))
-        {
-            return await RefuseAsync(
-                command,
-                OutboundErrorCodes.MethodNotAllowed,
-                "метод не разрешён каналом",
-                deliverResult: true,
-                existing,
                 cancellationToken,
-                channelRevisionNumber: channel.Number);
+                telemetry: telemetry);
         }
 
-        if (!RelativePathMatcher.IsStructurallyValid(request.RelativePath) ||
-            !channel.AllowedPaths.Any(template => RelativePathMatcher.Matches(request.RelativePath, template)))
+        if (!RelativePathValidator.IsStructurallyValid(request.RelativePath))
         {
             return await RefuseAsync(
                 command,
                 OutboundErrorCodes.PathNotAllowed,
-                "путь не разрешён каналом",
+                "путь недопустим",
                 deliverResult: true,
                 existing,
                 cancellationToken,
@@ -131,11 +185,11 @@ public sealed class ProcessOutboundRequestHandler(
 
         var authorization = authorizationResolver.Handle(channel);
 
-        if (authorization.ErrorCode is not null)
+        if (!authorization.IsSuccess)
         {
             return await RefuseAsync(
                 command,
-                authorization.ErrorCode,
+                authorization.ErrorCode!,
                 authorization.ErrorMessage,
                 deliverResult: true,
                 existing,
@@ -143,15 +197,28 @@ public sealed class ProcessOutboundRequestHandler(
                 channelRevisionNumber: channel.Number);
         }
 
+        var authorizationData = authorization.Value!;
+
         var operation = await recorder.TryStartAsync(request, command.ReturnAddress, cancellationToken);
 
         if (operation is null)
         {
             var raced = await recorder.FindAsync(request.MessageId, cancellationToken);
 
-            return raced is null
-                ? new ProcessOutboundRequestResult(false, ["operation: не удалось создать операцию"])
-                : await ReplayAsync(raced, command, cancellationToken);
+            if (raced is null)
+            {
+                telemetry.Outcome = OutcomeNames.GatewayRefused;
+                telemetry.ErrorCode = "operation";
+                telemetry.AttemptCount = 0;
+
+                GatewayTelemetry.SetTag(Activity.Current, GatewayTelemetry.OutcomeTag, OutcomeNames.GatewayRefused);
+                GatewayTelemetry.SetTag(Activity.Current, GatewayTelemetry.ErrorCodeTag, "operation");
+                GatewayTelemetry.SetTag(Activity.Current, GatewayTelemetry.AttemptCountTag, 0);
+
+                return new ProcessOutboundRequestResult(false, ["operation: не удалось создать операцию"]);
+            }
+
+            return await ReplayAsync(raced, command, cancellationToken, telemetry);
         }
 
         await recorder.MarkInProgressAsync(operation, cancellationToken);
@@ -162,19 +229,29 @@ public sealed class ProcessOutboundRequestHandler(
             request.RelativePath,
             request.QueryParameters
                 .Select(parameter => (parameter.Name, parameter.Value))
-                .Concat(authorization.QueryParameters)
+                .Concat(authorizationData.QueryParameters)
                 .ToArray(),
             request.ContentType,
             request.Body.ToByteArray(),
-            authorization.Headers,
+            authorizationData.Headers,
             channel.RetryPolicy,
             channel.PerAttemptTimeoutMs,
             channel.OverallCapMs,
             AllowRetryForUnsafeMethod(request),
             channel.AuthType,
-            authorization.ClientCertificate);
+            authorizationData.ClientCertificate);
 
         var outcome = await httpCaller.HandleAsync(httpRequest, cancellationToken);
+
+        GatewayTelemetry.SetTag(Activity.Current, GatewayTelemetry.OutcomeTag, OutcomeNames.Of(outcome.Outcome));
+        GatewayTelemetry.SetTag(Activity.Current, GatewayTelemetry.ErrorCodeTag, outcome.ErrorCode);
+        GatewayTelemetry.SetTag(Activity.Current, GatewayTelemetry.HttpStatusCodeTag, outcome.HttpStatusCode);
+        GatewayTelemetry.SetTag(Activity.Current, GatewayTelemetry.AttemptCountTag, outcome.AttemptCount);
+        GatewayTelemetry.SetTag(Activity.Current, GatewayTelemetry.ChannelRevisionTag, channel.Number);
+
+        telemetry.Outcome = OutcomeNames.Of(outcome.Outcome);
+        telemetry.ErrorCode = outcome.ErrorCode;
+        telemetry.AttemptCount = outcome.AttemptCount;
 
         var log = await recorder.CompleteAsync(
             operation,
@@ -196,12 +273,26 @@ public sealed class ProcessOutboundRequestHandler(
         bool deliverResult,
         OutboundOperation? existing,
         CancellationToken cancellationToken,
-        int? channelRevisionNumber = null)
+        int? channelRevisionNumber = null,
+        OutboundTelemetryState? telemetry = null)
     {
         var request = command.Request;
         var outcome = OutboundHttpOutcome.Refused(errorCode, errorMessage ?? "запрос отклонён шлюзом");
         var acceptsResult = deliverResult && !string.IsNullOrWhiteSpace(command.ReturnAddress);
         var address = acceptsResult ? command.ReturnAddress : null;
+        var state = telemetry ?? CurrentTelemetry.Value;
+
+        if (state is not null)
+        {
+            state.Outcome = OutcomeNames.GatewayRefused;
+            state.ErrorCode = errorCode;
+            state.AttemptCount = 0;
+        }
+
+        GatewayTelemetry.SetTag(Activity.Current, GatewayTelemetry.OutcomeTag, OutcomeNames.GatewayRefused);
+        GatewayTelemetry.SetTag(Activity.Current, GatewayTelemetry.ErrorCodeTag, errorCode);
+        GatewayTelemetry.SetTag(Activity.Current, GatewayTelemetry.AttemptCountTag, 0);
+        GatewayTelemetry.SetTag(Activity.Current, GatewayTelemetry.ChannelRevisionTag, channelRevisionNumber);
 
         var operation = existing;
         OutboundMessageLog? createdLog = null;
@@ -253,8 +344,23 @@ public sealed class ProcessOutboundRequestHandler(
     private async Task<ProcessOutboundRequestResult> ReplayAsync(
         OutboundOperation operation,
         ProcessOutboundRequestCommand command,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        OutboundTelemetryState? telemetry = null)
     {
+        var state = telemetry ?? CurrentTelemetry.Value;
+
+        if (state is not null)
+        {
+            state.Outcome = operation.Outcome ?? "IN_PROGRESS";
+            state.AttemptCount = operation.AttemptCount;
+        }
+
+        GatewayTelemetry.SetTag(
+            Activity.Current,
+            GatewayTelemetry.OutcomeTag,
+            operation.Outcome ?? "IN_PROGRESS");
+        GatewayTelemetry.SetTag(Activity.Current, GatewayTelemetry.AttemptCountTag, operation.AttemptCount);
+
         if (!string.Equals(operation.ProductId, command.Request.ProductId, StringComparison.Ordinal))
         {
             // Гонка двух продуктов с одним message_id: сохранённый результат не отдаётся.

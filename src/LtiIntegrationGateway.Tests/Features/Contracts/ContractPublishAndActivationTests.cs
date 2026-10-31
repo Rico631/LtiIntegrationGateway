@@ -2,7 +2,7 @@ using System.Net;
 using System.Text.Json;
 using LtiIntegrationGateway.Contracts.Management.V1;
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts;
 using LtiIntegrationGateway.Tests.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,8 +26,6 @@ public class ContractPublishAndActivationTests
                 {
                     new { match = "transport_error", statusCodes = Array.Empty<int>(), delaysMs = new[] { 100 } },
                 },
-                allowedMethods = new[] { "GET", "POST" },
-                allowedPaths = new[] { "/api/contracts" },
             },
         })));
 

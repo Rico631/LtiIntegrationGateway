@@ -1,6 +1,7 @@
 using LtiIntegrationGateway.Features.Host;
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts;
 using LtiIntegrationGateway.Tests.TestSupport;
 
 namespace LtiIntegrationGateway.Tests.Features.Host;

@@ -1,7 +1,9 @@
 using System.Net;
 using LtiIntegrationGateway.Contracts.Messages.V1;
+using LtiIntegrationGateway.Features.Channels.CreateChannel;
 using LtiIntegrationGateway.Features.Outbound;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Outbound;
 using LtiIntegrationGateway.Tests.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Rebus.Exceptions;
@@ -178,12 +180,10 @@ public class OutboundDispatchTests
                 null,
                 5000,
                 30000,
-                new RetryPolicy([RetryRule.TransportError([1])]),
-                ["GET"],
-                ["/api/contracts"]);
+                new RetryPolicy([RetryRule.TransportError([1])]));
 
-            await new LtiIntegrationGateway.Features.Channels.CreateChannelHandler(db)
-                .HandleAsync(new LtiIntegrationGateway.Features.Channels.CreateChannelCommand(
+            await new CreateChannelHandler(db)
+                .HandleAsync(new CreateChannelCommand(
                     OutboundFixture.ChannelName,
                     configuration));
         }
@@ -201,39 +201,43 @@ public class OutboundDispatchTests
     }
 
     [Test]
-    public async Task Method_not_allowed_by_channel_is_refused()
+    public async Task Any_method_is_forwarded_to_registered_channel()
     {
         await using var fixture = new OutboundFixture();
         await fixture.CreateActiveChannelAsync();
         await fixture.RegisterProductAsync();
 
         using var db = fixture.CreateDb();
+        fixture.Http.EnqueueResponse(HttpStatusCode.OK);
+
         await fixture.CreateProcessor(db).HandleAsync(Command(
             OutboundFixture.CreateRequest(method: "DELETE")));
 
-        await Assert.That(fixture.Http.CallCount).IsEqualTo(0);
+        await Assert.That(fixture.Http.CallCount).IsEqualTo(1);
 
         var delivered = await fixture.Results.WaitForSingleAsync(DeliveryTimeout);
 
-        await Assert.That(delivered.ErrorCode).IsEqualTo(OutboundErrorCodes.MethodNotAllowed);
+        await Assert.That(delivered.Outcome).IsEqualTo(Outcome.HttpResponse);
     }
 
     [Test]
-    public async Task Path_outside_allowed_templates_is_refused()
+    public async Task Any_relative_path_is_forwarded_to_registered_channel()
     {
         await using var fixture = new OutboundFixture();
         await fixture.CreateActiveChannelAsync();
         await fixture.RegisterProductAsync();
 
         using var db = fixture.CreateDb();
+        fixture.Http.EnqueueResponse(HttpStatusCode.OK);
+
         await fixture.CreateProcessor(db).HandleAsync(Command(
             OutboundFixture.CreateRequest(relativePath: "/api/admin")));
 
-        await Assert.That(fixture.Http.CallCount).IsEqualTo(0);
+        await Assert.That(fixture.Http.CallCount).IsEqualTo(1);
 
         var delivered = await fixture.Results.WaitForSingleAsync(DeliveryTimeout);
 
-        await Assert.That(delivered.ErrorCode).IsEqualTo(OutboundErrorCodes.PathNotAllowed);
+        await Assert.That(delivered.Outcome).IsEqualTo(Outcome.HttpResponse);
     }
 
     [Test]

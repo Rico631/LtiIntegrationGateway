@@ -1,8 +1,8 @@
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
 using Microsoft.EntityFrameworkCore;
 
-namespace LtiIntegrationGateway.Features.Channels;
+namespace LtiIntegrationGateway.Features.Channels.UpdateChannelDraft;
 
 /// <summary>Изменение настроек черновика; опубликованные ревизии не изменяются.</summary>
 public sealed record UpdateChannelDraftCommand(
@@ -72,7 +72,7 @@ public sealed class UpdateChannelDraftHandler(GatewayDbContext db)
             revision = existingDraft;
         }
 
-        ChannelRevisionWriter.Apply(db, revision, command.Configuration);
+        ChannelRevisionWriter.Apply(revision, command.Configuration);
         ChannelAuditWriter.Add(db, channel.Id, revision.Number, "update-channel-draft");
 
         await db.SaveChangesAsync(cancellationToken);
@@ -86,7 +86,6 @@ internal static class ChannelQueries
 {
     public static IQueryable<Channel> WithRevisions(GatewayDbContext db) =>
         db.Channels
-            .Include(channel => channel.Revisions).ThenInclude(revision => revision.AllowedMethods)
-            .Include(channel => channel.Revisions).ThenInclude(revision => revision.AllowedPaths)
+            .Include(channel => channel.Revisions)
             .AsSplitQuery();
 }

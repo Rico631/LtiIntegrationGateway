@@ -1,6 +1,6 @@
 using LtiIntegrationGateway.Contracts.Messages.V1;
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Outbound;
 using Microsoft.EntityFrameworkCore;
 
 namespace LtiIntegrationGateway.Features.Outbound;

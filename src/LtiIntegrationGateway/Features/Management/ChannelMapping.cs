@@ -1,7 +1,8 @@
 using LtiIntegrationGateway.Contracts.Management.V1;
 using LtiIntegrationGateway.Features.Channels;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
-using DomainRetryRule = LtiIntegrationGateway.Infrastructure.Persistence.Entities.RetryRule;
+using LtiIntegrationGateway.Features.Channels.GetChannel;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
+using DomainRetryRule = LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels.RetryRule;
 using ProtoRetryRule = LtiIntegrationGateway.Contracts.Management.V1.RetryRule;
 
 namespace LtiIntegrationGateway.Features.Management;
@@ -55,9 +56,7 @@ internal static class ChannelMapping
             NullIfEmpty(settings.UserName),
             settings.PerAttemptTimeoutMs,
             settings.OverallCapMs,
-            new RetryPolicy(rules),
-            settings.AllowedMethods.ToArray(),
-            settings.AllowedPaths.ToArray());
+            new RetryPolicy(rules));
     }
 
     public static ChannelSettings ToSettings(ChannelConfiguration configuration)
@@ -82,9 +81,6 @@ internal static class ChannelMapping
                 DelaysMs = { rule.DelaysMs },
             });
         }
-
-        settings.AllowedMethods.AddRange(configuration.AllowedMethods);
-        settings.AllowedPaths.AddRange(configuration.AllowedPaths);
 
         return settings;
     }

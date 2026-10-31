@@ -1,5 +1,12 @@
 using LtiIntegrationGateway.Features.Channels;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Features.Channels.ActivateChannelRevision;
+using LtiIntegrationGateway.Features.Channels.CreateChannel;
+using LtiIntegrationGateway.Features.Channels.GetChannel;
+using LtiIntegrationGateway.Features.Channels.PublishChannelRevision;
+using LtiIntegrationGateway.Features.Channels.RollbackChannelRevision;
+using LtiIntegrationGateway.Features.Channels.UpdateChannelDraft;
+
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
 using LtiIntegrationGateway.Tests.TestSupport;
 using Microsoft.EntityFrameworkCore;
 
@@ -198,7 +205,7 @@ public class ChannelLifecycleTests
                 ChannelTestData.ValidConfiguration("http://bank-a.example") with
                 {
                     ConfigKey = null,
-                    AllowedPaths = ["/api/../admin"],
+                    RetryPolicy = new RetryPolicy([]),
                 }));
 
             var publishResult = await publish.HandleAsync(new PublishChannelRevisionCommand(channelId, 2));

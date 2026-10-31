@@ -1,6 +1,11 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Inbound;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Management;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Outbound;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRoutes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
@@ -41,10 +46,6 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
     public DbSet<Channel> Channels => Set<Channel>();
 
     public DbSet<ChannelRevision> ChannelRevisions => Set<ChannelRevision>();
-
-    public DbSet<ChannelAllowedMethod> ChannelAllowedMethods => Set<ChannelAllowedMethod>();
-
-    public DbSet<ChannelAllowedPath> ChannelAllowedPaths => Set<ChannelAllowedPath>();
 
     public DbSet<ChannelAuditEntry> ChannelAuditEntries => Set<ChannelAuditEntry>();
 
@@ -100,32 +101,6 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
 
             revision.HasIndex(entity => new { entity.ChannelId, entity.Number }).IsUnique();
             revision.HasIndex(entity => new { entity.ChannelId, entity.Status });
-
-            revision
-                .HasMany(entity => entity.AllowedMethods)
-                .WithOne(method => method.ChannelRevision)
-                .HasForeignKey(method => method.ChannelRevisionId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            revision
-                .HasMany(entity => entity.AllowedPaths)
-                .WithOne(path => path.ChannelRevision)
-                .HasForeignKey(path => path.ChannelRevisionId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<ChannelAllowedMethod>(method =>
-        {
-            method.HasKey(entity => entity.Id);
-            method.Property(entity => entity.Method).HasMaxLength(16).IsRequired();
-            method.HasIndex(entity => new { entity.ChannelRevisionId, entity.Method }).IsUnique();
-        });
-
-        modelBuilder.Entity<ChannelAllowedPath>(path =>
-        {
-            path.HasKey(entity => entity.Id);
-            path.Property(entity => entity.Template).HasMaxLength(2048).IsRequired();
-            path.HasIndex(entity => new { entity.ChannelRevisionId, entity.Template }).IsUnique();
         });
 
         modelBuilder.Entity<ChannelAuditEntry>(audit =>

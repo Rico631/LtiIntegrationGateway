@@ -68,3 +68,17 @@ foreach ($f in $files) {
 Вывод команды должен быть пустым; сборка `dotnet build LtiIntegrationGateway.slnx` — без ошибок и
 предупреждений.
 
+## C#: обработчики и сущности
+
+**Обработчики.** Файл, содержащий тип с суффиксом `Handler`, SHALL называться `<ИмяТипа>.cs`.
+Например, `LoadActiveChannelHandler` хранится в `LoadActiveChannelHandler.cs`.
+
+**Сущности.** Файлы `Infrastructure/Persistence/Entities/**` SHALL быть сгруппированы по логическим
+папкам (`Channels`, `Contracts`, `Inbound`, `Outbound`, `ProductRoutes`, `Management`). Каждый класс
+сущности SHALL реализовывать `IEntity`. Каждое публичное свойство сущности SHALL иметь XML
+`<summary>`; перечисления сущностей документируются аналогично.
+
+**Результаты.** Если операция возвращает значение и возможный отказ, используется
+`Infrastructure/Results/Result<T>` с `Value`, `ErrorCode`, `ErrorMessage`; отдельные записи с той же
+тройкой полей не создаются.
+

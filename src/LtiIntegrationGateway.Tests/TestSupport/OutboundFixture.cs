@@ -1,9 +1,13 @@
 using LtiIntegrationGateway.Contracts.Messages.V1;
 using LtiIntegrationGateway.Features.Channels;
+using LtiIntegrationGateway.Features.Channels.ActivateChannelRevision;
+using LtiIntegrationGateway.Features.Channels.CreateChannel;
+using LtiIntegrationGateway.Features.Channels.PublishChannelRevision;
 using LtiIntegrationGateway.Features.Outbound;
 using LtiIntegrationGateway.Features.ProductRoutes;
+using LtiIntegrationGateway.Infrastructure.Observability;
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
 using LtiIntegrationGateway.Infrastructure.Rebus;
 using LtiIntegrationGateway.Infrastructure.Security;
 using Microsoft.Extensions.DependencyInjection;
@@ -140,6 +144,8 @@ public sealed class OutboundFixture : IAsyncDisposable
 
     public CollectingResultHandler Results { get; } = new();
 
+    public GatewayMetrics Metrics { get; } = new();
+
     public TestSecretStore Secrets { get; } = new();
 
     public TestChannelCertificateStore Certificates { get; } = new();
@@ -151,8 +157,6 @@ public sealed class OutboundFixture : IAsyncDisposable
         ChannelAuthType authType = ChannelAuthType.None,
         string? configKey = null,
         string? headerName = "X-Api-Key",
-        IReadOnlyList<string>? allowedMethods = null,
-        IReadOnlyList<string>? allowedPaths = null,
         int perAttemptTimeoutMs = 5000,
         int overallCapMs = 30000,
         string channelName = ChannelName,
@@ -168,9 +172,7 @@ public sealed class OutboundFixture : IAsyncDisposable
             UserName: null,
             perAttemptTimeoutMs,
             overallCapMs,
-            retryPolicy ?? new RetryPolicy([RetryRule.TransportError([1, 1])]),
-            allowedMethods ?? ["GET", "POST"],
-            allowedPaths ?? ["/api/contracts", "/api/contracts/{id}"]);
+            retryPolicy ?? new RetryPolicy([RetryRule.TransportError([1, 1])]));
 
         var created = await new CreateChannelHandler(db).HandleAsync(new CreateChannelCommand(channelName, configuration));
 
@@ -207,7 +209,8 @@ public sealed class OutboundFixture : IAsyncDisposable
         new ExecuteHttpCallHandler(ChannelClients),
         new OutboundOperationRecorder(db),
         new StoredOutboundResultFactory(),
-        new PublishOutboundResultHandler(bus ?? _gatewayBus, new OutboundOperationRecorder(db)));
+        new PublishOutboundResultHandler(bus ?? _gatewayBus, new OutboundOperationRecorder(db)),
+        Metrics);
 
     /// <summary>
     /// Собирает диспетчер с обычным для приложения жизненным циклом зависимостей: контекст БД на цикл,
@@ -224,6 +227,7 @@ public sealed class OutboundFixture : IAsyncDisposable
         var services = new ServiceCollection();
 
         services.AddLogging();
+        services.AddSingleton(Metrics);
         services.AddSingleton(bus ?? _gatewayBus);
         services.AddScoped(_ => CreateDb());
         services.AddScoped<OutboundOperationRecorder>();
@@ -279,6 +283,7 @@ public sealed class OutboundFixture : IAsyncDisposable
 
         _gatewayBus.Dispose();
         _productBus.Dispose();
+        Metrics.Dispose();
         Certificates.Dispose();
         Database.Dispose();
 

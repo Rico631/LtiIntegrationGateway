@@ -1,4 +1,4 @@
-using LtiIntegrationGateway.Features.Channels;
+using LtiIntegrationGateway.Features.Channels.CreateChannel;
 using LtiIntegrationGateway.Tests.TestSupport;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,16 +20,11 @@ public class ChannelStorageTests
 
         using (var db = database.CreateContext())
         {
-            var revision = await db.ChannelRevisions
-                .Include(entity => entity.AllowedMethods)
-                .Include(entity => entity.AllowedPaths)
-                .SingleAsync();
+            var revision = await db.ChannelRevisions.SingleAsync();
 
             await Assert.That(revision.ConfigKey).IsEqualTo("Secrets:BankA:Token");
             await Assert.That(revision.RetryPolicy.Rules.Count).IsEqualTo(1);
             await Assert.That(revision.RetryPolicy.Rules[0].DelaysMs.SequenceEqual([1000, 2000, 4000])).IsTrue();
-            await Assert.That(revision.AllowedMethods.Count).IsEqualTo(2);
-            await Assert.That(revision.AllowedPaths.Count).IsEqualTo(2);
         }
     }
 

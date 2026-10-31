@@ -1,12 +1,12 @@
 using LtiIntegrationGateway.Infrastructure.Management;
 using LtiIntegrationGateway.Infrastructure.OpenApi;
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts;
 using LtiIntegrationGateway.Infrastructure.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
-namespace LtiIntegrationGateway.Features.Contracts;
+namespace LtiIntegrationGateway.Features.Contracts.ActivateContractVersion;
 
 /// <summary>Активация версии контракта: регистрация маршрутов и снятие предыдущей версии.</summary>
 public sealed record ActivateContractVersionCommand(string ChannelName, int Version);
@@ -91,10 +91,7 @@ public sealed class ActivateContractVersionHandler(
 
         try
         {
-            if (previous is not null)
-            {
-                previous.Status = ContractVersionStatus.Superseded;
-            }
+            previous?.Status = ContractVersionStatus.Superseded;
 
             version.Status = ContractVersionStatus.Active;
             version.ActivatedAt = DateTimeOffset.UtcNow;

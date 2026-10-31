@@ -1,6 +1,6 @@
 using Google.Protobuf;
 using LtiIntegrationGateway.Contracts.Messages.V1;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Outbound;
 
 namespace LtiIntegrationGateway.Features.Outbound;
 

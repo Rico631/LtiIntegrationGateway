@@ -37,7 +37,7 @@
 | Шаг | Что делает |
 |---|---|
 | `AddDbContext<GatewayDbContext>` | SQLite по `ConnectionStrings:Gateway`, без строки — исключение |
-| `AddHealthChecks`, `AddGatewayRebus` | liveness и шина с ProtoJSON-сериализатором |
+| `AddGatewayObservability`, `AddHealthChecks`, `AddGatewayRebus` | OTel traces/metrics, readiness-проверка хранилища и шина с ProtoJSON-сериализатором |
 | Регистрация срезов `Features/Channels` | валидатор и шесть сценариев жизненного цикла |
 | Регистрация outbound-шагов | `ISecretStore`, маршруты продуктов, шаги проверки и вызова; `StoredOutboundResultFactory` восстанавливает результат для повтора и диспетчера |
 | Регистрация диспетчера результатов | `Configure<OutboundDeliveryOptions>` и `AddHostedService<OutboundResultDispatcher>`; параметры — ключи `Outbound:DeliveryDispatcher` |
@@ -50,10 +50,17 @@
 | `Database.Migrate()` | миграции применяются при старте |
 | `UseRateLimiter`, `UseMiddleware<ManagementApiKeyMiddleware>` | ограничение частоты и ключ API |
 | `((IEndpointRouteBuilder)app).DataSources.Add(...)` | динамические маршруты: регистрации в DI недостаточно |
-| `MapGrpcService<ManagementApiService>`, `MapHealthChecks` | управляющий сервис и `/health/live` |
+| `MapGrpcService<ManagementApiService>`, `MapHealthChecks` | управляющий сервис, `/health/live` и `/health/ready` |
 
 Инварианты: fail-fast проверка конфигурации — после `Build()` (иначе тестовые переопределения не
-видны); миграции применяются автоматически; `/health/live` не требует ключа управляющего API.
+видны); миграции применяются автоматически; `/health/live` не требует ключа управляющего API, а
+`/health/ready` проверяет только доступность хранилища.
+
+`AddGatewayObservability` — единственная точка подключения OTel: она читает `Observability:Otel`,
+создаёт OTLP-экспортёры traces/metrics и регистрирует `GatewayMetrics`; при включённой
+телеметрии также регистрируется `OutboundBacklogMetricsUpdater`. Rebus-диагностика включается в
+`Infrastructure/Rebus/RebusConfigurationExtensions` через `EnableDiagnosticSources`, а
+`AddRebusInstrumentation` в OTel builder связывает её spans и метрики с общим pipeline.
 
 ## 3. Карта каталогов
 
@@ -75,6 +82,8 @@
 | `Infrastructure/Http` | `ChannelHttpClientKey`, `ChannelHttpClientPool` (`IChannelHttpClientFactory`), аренда обработчика: пул соединений по ключу канала | ADR §7.7 |
 | `Infrastructure/Security` | `ISecretStore`, `IChannelCertificateStore` и реализации поверх `IConfiguration`; кэш клиентских сертификатов на время жизни процесса | ADR §7.5, §13 |
 | `Infrastructure/Management` | ключ управляющего API, аудит управляющих операций | ADR §13, §15.1 |
+| `Infrastructure/Observability` | OTel-настройки, `GatewayTelemetry`, `GatewayMetrics`, backlog-gauge и OTLP-экспорт | ADR §17 |
+| `Infrastructure/Health` | `DatabaseHealthCheck` для `GET /health/ready` | ADR §17, §20 |
 
 `bin`, `obj`, `Properties` — служебные, в архитектуре не участвуют.
 
@@ -110,14 +119,14 @@ Features/ProductRoutes
 Features/Outbound
 ├── OutboundRequestHandler        адаптер Rebus: заголовки → команда
 ├── ProcessOutboundRequestHandler сценарий: порядок проверок и вызов
-├── ResolveSenderIdentity         product_id + rbs2-sender-address по ProductRoutes
-├── LoadActiveChannel             активная ревизия канала
-├── RelativePathMatcher           структурные запреты и шаблоны пути
-├── ResolveAuthorization          none / bearer / api_key / basic / client_certificate
-├── ExecuteHttpCall               HTTP с повторами по политике канала, обработчик из пула
+├── ResolveSenderIdentityHandler         product_id + rbs2-sender-address по ProductRoutes
+├── LoadActiveChannelHandler             активная ревизия канала
+├── RelativePathValidator                структурная проверка пути без allow-list
+├── ResolveAuthorizationHandler          none / bearer / api_key / basic / client_certificate
+├── ExecuteHttpCallHandler               HTTP с повторами по политике канала, обработчик из пула
 ├── OutboundOperationRecorder     операция и журнал одной транзакцией
 ├── StoredOutboundResultFactory   восстановление результата из операции и журнала
-├── PublishOutboundResult         Send результата и признак доставки
+├── PublishOutboundResultHandler         Send результата и признак доставки
 ├── OutboundResultDispatcher      фоновая повторная доставка `pending`-записей
 ├── OutboundDeliveryOptions       параметры диспетчера (включение, интервал, пачка)
 └── OutboundErrorCodes            коды отказов и транспортных ошибок
@@ -195,7 +204,7 @@ Features/Management
 | Компонент | Ответственность | Особенности |
 |---|---|---|
 | `Persistence/GatewayDbContext` | модель данных и конфигурация EF Core | уникальные индексы, каскады, конвертация enum и политики повторов в строку/JSON |
-| `Persistence/Entities` | каналы и ревизии, маршруты продуктов, контракты с настройками приёма, операции со схемами, журналы | опубликованные ревизии и версии контрактов неизменяемы |
+| `Persistence/Entities` | каналы и ревизии, маршруты продуктов, контракты с настройками приёма, операции со схемами, журналы; папки по логическим областям, все классы реализуют `IEntity`, публичные свойства документированы | опубликованные ревизии и версии контрактов неизменяемы |
 | `Persistence/Migrations` | `InitialChannelRegistry`, `AddOutboundDispatch`, `AddContractRegistry`, `AddInboundDispatch`, `AddOutboundResultDispatcher`, `AddContractOperationSettings` | применяются при старте |
 | `Rebus/ProtobufSerializer` | `ISerializer` на ProtoJSON | заголовки `rbs2-msg-type` и `rbs2-content-type` |
 | `Rebus/ProtobufMessageRegistry` | реестр типов сообщений | неизвестный тип — диагностируемая ошибка |
@@ -236,7 +245,8 @@ Features/Management
 
 **Outbound.** `OutboundRequest` → проверки (поля, продукт и вычисленный адрес отправителя
 `<product_id>.inbox`, тот же адрес для доставки результата, идемпотентность, активная ревизия
-канала, метод и путь, авторизация) → операция `Accepted` → `InProgress` → HTTP-вызов с повторами →
+канала, структурная проверка пути, авторизация) → операция `Accepted` → `InProgress` → HTTP-вызов
+с повторами →
 **одна транзакция**: операция `Completed` + запись журнала
 `pending` (с адресом доставки, `correlation_id`, текстом ошибки, номером ревизии канала и
 `CreatedAt`) → `Send` результата → журнал `sent`. Отказы, возникшие до проверки адреса возврата,
@@ -249,7 +259,7 @@ Features/Management
 недоставляемые записи не занимают пачку; отправка и фиксация статуса обрабатываются по отдельности, а
 гарантия остаётся «минимум один раз». Повторный `OutboundRequest` с завершённым `message_id` отдаёт
 идентичный сохранённый результат на адрес из текущего сообщения; владение `product_id` проверяется до
-выдачи результата, а проверки канала, метода, пути и авторизации для завершённой операции не
+выдачи результата, а проверки канала и авторизации для завершённой операции не
 повторяются (ADR §8.9, §8.10).
 
 **Контракты.** Загрузка создаёт черновик версии; публикация извлекает операции и схемы тела
@@ -291,6 +301,7 @@ Features/Management
 |---|---|
 | Ревизия — агрегат настроек, в `Channel` настроек нет | неизменяемость опубликованного и безопасный откат |
 | Результат операции — запись с `Problems`, а не исключение | отказ домена не является сбоем, список проблем возвращается целиком |
+| Операции с одним значением и возможным отказом возвращают `Result<T>` | единая форма `Value`/`ErrorCode`/`ErrorMessage` вместо дублирующихся result-записей |
 | Новые дочерние сущности добавляются через `DbSet`, а не только в навигацию | клиентский Guid-ключ: EF считает их `Modified`, `UPDATE` не находит строку |
 | Моменты времени журналов хранятся как миллисекунды Unix через EF-конвертер | SQLite не умеет сортировать `DateTimeOffset`; преобразование типа скрыто в модели, а индексы и `ORDER BY` работают по `CreatedAt`/`ReceivedAt` |
 | Строковые поля proto заполняются только непустыми значениями | присваивание `null` бросает `ArgumentNullException` |
@@ -354,6 +365,7 @@ Features/Management
 | `2026-10-31-queue-naming` | `message-serialization`, `outbound-dispatch`, `contract-registry` | `QueueNames` (входная очередь `lti.gateway.outbound`, error-queue `lti.gateway.error`), вычисляемый адрес продукта `<product_id>.inbox`: регистрация и чтение маршрута (проблема `address`), проверка `rbs2-sender-address` и `rbs2-return-address`, формат очереди версии контракта при публикации (проблема `queue`) |
 | `2026-10-31-complete-management-api` | `management-api` | аудит чтения канала и отказов `NotFound`, выравнивание комментариев контракта и README |
 | `2026-10-31-fix-adr-deviations` | `outbound-dispatch`, `management-api`, `contract-registry`, `channel-registry`, `inbound-routing`, `gateway-host` | доставка отказа только на проверенный адрес (`Undeliverable`), `FailFastException` для невалидного DTO, `ProblemSeverity`, валидация management-команд, проверка секретов при старте, удаление квоты операции и Unix-колонок (миграции `RemoveContractOperationRateLimit`, `RemoveUnixTimestampColumns`) |
+| `2026-10-31-otel-observability` | `observability`, `gateway-host` | `Infrastructure/Observability` (OTLP traces/metrics, бизнес-метрики, backlog-gauge), Rebus diagnostics, readiness-проверка `DatabaseHealthCheck`, `/health/ready` |
 
 ## 11. Поддержание актуальности
 

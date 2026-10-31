@@ -1,5 +1,5 @@
 using LtiIntegrationGateway.Features.Channels;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
 
 namespace LtiIntegrationGateway.Tests.Features.Channels;
 
@@ -11,8 +11,6 @@ public class ChannelConfigurationValidatorTests
         string baseUrl = "https://bank-a.example",
         ChannelAuthType authType = ChannelAuthType.Bearer,
         string? configKey = "Secrets:BankA:Token",
-        IReadOnlyList<string>? methods = null,
-        IReadOnlyList<string>? paths = null,
         RetryPolicy? policy = null,
         int perAttemptTimeoutMs = 30_000,
         int overallCapMs = 120_000) =>
@@ -24,9 +22,7 @@ public class ChannelConfigurationValidatorTests
             UserName: null,
             perAttemptTimeoutMs,
             overallCapMs,
-            policy ?? new RetryPolicy([RetryRule.TransportError([1000])]),
-            methods ?? ["GET"],
-            paths ?? ["/api/contracts"]);
+            policy ?? new RetryPolicy([RetryRule.TransportError([1000])]));
 
     [Test]
     public async Task Valid_configuration_has_no_problems()
@@ -50,23 +46,6 @@ public class ChannelConfigurationValidatorTests
         var problems = Validator.Validate(With(baseUrl: "https://user:pass@bank-a.example"));
 
         await Assert.That(problems.Any(problem => problem.Contains("учётные данные", StringComparison.Ordinal))).IsTrue();
-    }
-
-    [Test]
-    public async Task Unsupported_method_is_rejected()
-    {
-        var problems = Validator.Validate(With(methods: ["GET", "TRACE"]));
-
-        await Assert.That(problems.Any(problem => problem.Contains("TRACE", StringComparison.Ordinal))).IsTrue();
-    }
-
-    [Test]
-    public async Task Dangerous_paths_are_rejected()
-    {
-        var problems = Validator.Validate(With(paths: ["/api/../admin", "/api//contracts", "http://evil/api", "api/contracts"]));
-
-        await Assert.That(problems.Count(problem => problem.StartsWith("allowed_paths", StringComparison.Ordinal)))
-            .IsEqualTo(4);
     }
 
     [Test]

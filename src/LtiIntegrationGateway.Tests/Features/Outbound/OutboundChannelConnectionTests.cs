@@ -2,8 +2,11 @@ using System.Net;
 using System.Security.Cryptography;
 using LtiIntegrationGateway.Contracts.Messages.V1;
 using LtiIntegrationGateway.Features.Channels;
+using LtiIntegrationGateway.Features.Channels.ActivateChannelRevision;
+using LtiIntegrationGateway.Features.Channels.PublishChannelRevision;
+using LtiIntegrationGateway.Features.Channels.UpdateChannelDraft;
 using LtiIntegrationGateway.Features.Outbound;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
 using LtiIntegrationGateway.Tests.TestSupport;
 
 namespace LtiIntegrationGateway.Tests.Features.Outbound;
@@ -174,9 +177,7 @@ public class OutboundChannelConnectionTests
             UserName: null,
             PerAttemptTimeoutMs: 5000,
             OverallCapMs: 30000,
-            new RetryPolicy([RetryRule.TransportError([1])]),
-            AllowedMethods: ["GET", "POST"],
-            AllowedPaths: ["/api/contracts", "/api/contracts/{id}"]);
+            new RetryPolicy([RetryRule.TransportError([1])]));
 
         using (var db = fixture.CreateDb())
         {

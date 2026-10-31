@@ -1,5 +1,6 @@
+using LtiIntegrationGateway.Infrastructure.Observability;
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Outbound;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -19,34 +20,21 @@ namespace LtiIntegrationGateway.Features.Outbound;
 /// <item>в лог попадают <c>messageId</c>, канал и причина, без тел и секретов.</item>
 /// </list>
 /// </remarks>
-public sealed class OutboundResultDispatcher : BackgroundService
+public sealed class OutboundResultDispatcher(
+    IServiceScopeFactory scopeFactory,
+    IOptions<OutboundDeliveryOptions> options,
+    TimeProvider timeProvider,
+    ILogger<OutboundResultDispatcher> logger,
+    GatewayMetrics metrics) : BackgroundService
 {
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly OutboundDeliveryOptions _options;
-    private readonly TimeProvider _timeProvider;
-    private readonly ILogger<OutboundResultDispatcher> _logger;
-
-    public OutboundResultDispatcher(
-        IServiceScopeFactory scopeFactory,
-        IOptions<OutboundDeliveryOptions> options,
-        TimeProvider timeProvider,
-        ILogger<OutboundResultDispatcher> logger)
-    {
-        ArgumentNullException.ThrowIfNull(options);
-
-        _scopeFactory = scopeFactory;
-        _options = options.Value;
-        _options.Validate();
-        _timeProvider = timeProvider;
-        _logger = logger;
-    }
+    private readonly OutboundDeliveryOptions _options = CreateOptions(options);
 
     /// <summary>Цикл службы: обработка пачки и пауза до следующего запуска.</summary>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!_options.Enabled)
         {
-            _logger.LogInformation("диспетчер результатов отключён конфигурацией");
+            logger.LogInformation("диспетчер результатов отключён конфигурацией");
 
             return;
         }
@@ -65,12 +53,12 @@ public sealed class OutboundResultDispatcher : BackgroundService
             {
                 // Следующий цикл повторит выборку: сбой чтения или записи в БД не должен
                 // останавливать службу.
-                _logger.LogError(exception, "цикл диспетчера результатов завершился ошибкой");
+                logger.LogError(exception, "цикл диспетчера результатов завершился ошибкой");
             }
 
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(_options.IntervalSeconds), _timeProvider, stoppingToken);
+                await Task.Delay(TimeSpan.FromSeconds(_options.IntervalSeconds), timeProvider, stoppingToken);
             }
             catch (OperationCanceledException)
             {
@@ -85,7 +73,7 @@ public sealed class OutboundResultDispatcher : BackgroundService
     /// </summary>
     public async Task DispatchPendingAsync(CancellationToken cancellationToken = default)
     {
-        await using var scope = _scopeFactory.CreateAsyncScope();
+        await using var scope = scopeFactory.CreateAsyncScope();
 
         var db = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
         var recorder = scope.ServiceProvider.GetRequiredService<OutboundOperationRecorder>();
@@ -95,10 +83,7 @@ public sealed class OutboundResultDispatcher : BackgroundService
         // Порядок обеспечивается колонкой CreatedAt: EF хранит DateTimeOffset как миллисекунды Unix.
         // Записи без адреса доставки и без операции не участвуют в выборке: они не могут быть
         // доставлены и не должны занимать пачку, иначе доставляемые записи голодают.
-        var batch = await db.OutboundMessageLogs
-            .Where(log => log.DeliveryStatus == OutboundDeliveryStatus.Pending &&
-                          log.DeliveryAddress != string.Empty &&
-                          db.OutboundOperations.Any(operation => operation.MessageId == log.MessageId))
+        var batch = await db.PendingForDelivery()
             .OrderBy(log => log.CreatedAt)
             .Take(_options.BatchSize)
             .ToListAsync(cancellationToken);
@@ -137,7 +122,7 @@ public sealed class OutboundResultDispatcher : BackgroundService
         if (operation is null)
         {
             // Защита от повреждённых данных: такие записи не попадают в выборку и остаются pending.
-            _logger.LogWarning(
+            logger.LogWarning(
                 "результат {MessageId} канала {ChannelName} не отправлен: операция не найдена",
                 log.MessageId,
                 log.ChannelName);
@@ -148,13 +133,18 @@ public sealed class OutboundResultDispatcher : BackgroundService
         if (string.IsNullOrWhiteSpace(log.DeliveryAddress))
         {
             // Защита от повреждённых данных: пустой адрес исключён из выборки.
-            _logger.LogWarning(
+            logger.LogWarning(
                 "результат {MessageId} канала {ChannelName} не отправлен: адрес доставки пуст",
                 log.MessageId,
                 log.ChannelName);
 
             return;
         }
+
+        using var activity = GatewayTelemetry.StartActivity(GatewayTelemetry.OutboundDeliveryActivity);
+        GatewayTelemetry.SetTag(activity, GatewayTelemetry.DirectionTag, GatewayTelemetry.OutboundDirection);
+        GatewayTelemetry.SetTag(activity, GatewayTelemetry.MessageIdTag, log.MessageId);
+        GatewayTelemetry.SetTag(activity, GatewayTelemetry.ChannelTag, log.ChannelName);
 
         try
         {
@@ -166,8 +156,13 @@ public sealed class OutboundResultDispatcher : BackgroundService
         }
         catch (Exception exception)
         {
+            GatewayTelemetry.SetTag(activity, GatewayTelemetry.OutcomeTag, "failed");
+            GatewayTelemetry.SetTag(activity, GatewayTelemetry.ErrorCodeTag, "delivery");
+            GatewayTelemetry.SetTag(activity, GatewayTelemetry.DeliverySucceededTag, false);
+            metrics.RecordDelivery(log.ChannelName, succeeded: false);
+
             // Отправка не удалась: запись остаётся pending, следующий цикл повторит попытку.
-            _logger.LogWarning(
+            logger.LogWarning(
                 exception,
                 "отправка результата {MessageId} канала {ChannelName} не удалась; запись остаётся в ожидании",
                 log.MessageId,
@@ -176,11 +171,15 @@ public sealed class OutboundResultDispatcher : BackgroundService
             return;
         }
 
+        GatewayTelemetry.SetTag(activity, GatewayTelemetry.OutcomeTag, "delivered");
+        GatewayTelemetry.SetTag(activity, GatewayTelemetry.DeliverySucceededTag, true);
+        metrics.RecordDelivery(log.ChannelName, succeeded: true);
+
         try
         {
             await recorder.MarkDeliveredAsync(log, cancellationToken);
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "результат {MessageId} канала {ChannelName} доставлен повторно",
                 log.MessageId,
                 log.ChannelName);
@@ -193,7 +192,7 @@ public sealed class OutboundResultDispatcher : BackgroundService
         {
             // Сообщение уже ушло продукту: сбой фиксации приводит к дублю при следующем цикле,
             // но не к потере результата.
-            _logger.LogError(
+            logger.LogError(
                 exception,
                 "результат {MessageId} канала {ChannelName} отправлен, но статус доставки не " +
                 "зафиксирован — возможен дубль",
@@ -216,10 +215,20 @@ public sealed class OutboundResultDispatcher : BackgroundService
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(
+            logger.LogWarning(
                 exception,
                 "не удалось перечитать запись {MessageId} после сбоя фиксации статуса",
                 log.MessageId);
         }
+    }
+
+    private static OutboundDeliveryOptions CreateOptions(IOptions<OutboundDeliveryOptions> options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        var value = options.Value;
+        value.Validate();
+
+        return value;
     }
 }

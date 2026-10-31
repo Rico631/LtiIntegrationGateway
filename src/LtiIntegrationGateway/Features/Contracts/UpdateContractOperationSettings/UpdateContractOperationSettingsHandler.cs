@@ -1,12 +1,12 @@
 using LtiIntegrationGateway.Infrastructure.Management;
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts;
 using LtiIntegrationGateway.Infrastructure.Rebus;
 using LtiIntegrationGateway.Infrastructure.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
-namespace LtiIntegrationGateway.Features.Contracts;
+namespace LtiIntegrationGateway.Features.Contracts.UpdateContractOperationSettings;
 
 /// <summary>
 /// Изменяемые настройки операции: <c>null</c> означает «поле не передано и не меняется».

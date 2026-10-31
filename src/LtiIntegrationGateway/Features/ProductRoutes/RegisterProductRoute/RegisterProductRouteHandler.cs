@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRoutes;
 using LtiIntegrationGateway.Infrastructure.Rebus;
 using Microsoft.EntityFrameworkCore;
 

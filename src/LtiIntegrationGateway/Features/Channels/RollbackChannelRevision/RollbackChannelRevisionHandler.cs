@@ -1,8 +1,9 @@
+using LtiIntegrationGateway.Features.Channels.UpdateChannelDraft;
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
 using Microsoft.EntityFrameworkCore;
 
-namespace LtiIntegrationGateway.Features.Channels;
+namespace LtiIntegrationGateway.Features.Channels.RollbackChannelRevision;
 
 /// <summary>Откат к предыдущей ревизии без удаления текущей.</summary>
 public sealed record RollbackChannelRevisionCommand(Guid ChannelId);

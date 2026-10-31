@@ -1,9 +1,10 @@
 using LtiIntegrationGateway.Infrastructure.Management;
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts;
 using Microsoft.EntityFrameworkCore;
 
-namespace LtiIntegrationGateway.Features.Contracts;
+namespace LtiIntegrationGateway.Features.Contracts.UpdateContractVersionSettings;
 
 /// <summary>Изменение настроек входящих вызовов версии контракта; только для черновика.</summary>
 public sealed record UpdateContractVersionSettingsCommand(

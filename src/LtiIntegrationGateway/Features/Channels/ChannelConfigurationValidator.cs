@@ -1,4 +1,4 @@
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
 
 namespace LtiIntegrationGateway.Features.Channels;
 
@@ -9,18 +9,7 @@ namespace LtiIntegrationGateway.Features.Channels;
 /// </remarks>
 public sealed class ChannelConfigurationValidator
 {
-    private const int MaxPathLength = 2048;
     private const int MaxDelaysPerRule = 5;
-
-    private static readonly HashSet<string> AllowedHttpMethods = new(StringComparer.Ordinal)
-    {
-        "GET",
-        "HEAD",
-        "POST",
-        "PUT",
-        "PATCH",
-        "DELETE",
-    };
 
     public IReadOnlyList<string> Validate(ChannelConfiguration configuration)
     {
@@ -29,8 +18,6 @@ public sealed class ChannelConfigurationValidator
         var problems = new List<string>();
 
         ValidateBaseUrl(configuration.BaseUrl, problems);
-        ValidateMethods(configuration.AllowedMethods, problems);
-        ValidatePaths(configuration.AllowedPaths, problems);
         ValidateCredentials(configuration, problems);
         ValidateTimeouts(configuration, problems);
         ValidateRetryPolicy(configuration.RetryPolicy, problems);
@@ -61,92 +48,6 @@ public sealed class ChannelConfigurationValidator
         {
             problems.Add("base_url: учётные данные в адресе не допускаются");
         }
-    }
-
-    private static void ValidateMethods(IReadOnlyList<string> methods, List<string> problems)
-    {
-        if (methods.Count == 0)
-        {
-            problems.Add("allowed_methods: должен быть указан хотя бы один метод");
-            return;
-        }
-
-        foreach (var method in methods)
-        {
-            if (!AllowedHttpMethods.Contains(method))
-            {
-                problems.Add($"allowed_methods: метод '{method}' не поддерживается");
-            }
-        }
-    }
-
-    private static void ValidatePaths(IReadOnlyList<string> templates, List<string> problems)
-    {
-        if (templates.Count == 0)
-        {
-            problems.Add("allowed_paths: должен быть указан хотя бы один шаблон");
-            return;
-        }
-
-        foreach (var template in templates)
-        {
-            var problem = ValidatePath(template);
-
-            if (problem is not null)
-            {
-                problems.Add($"allowed_paths: шаблон '{template}' недопустим: {problem}");
-            }
-        }
-    }
-
-    private static string? ValidatePath(string template)
-    {
-        if (string.IsNullOrWhiteSpace(template))
-        {
-            return "пустое значение";
-        }
-
-        if (!template.StartsWith('/'))
-        {
-            return "должен начинаться с '/'";
-        }
-
-        if (template.Length > MaxPathLength)
-        {
-            return $"длина больше {MaxPathLength} символов";
-        }
-
-        if (template.Contains("://", StringComparison.Ordinal))
-        {
-            return "содержит схему";
-        }
-
-        if (template.Contains("//", StringComparison.Ordinal))
-        {
-            return "содержит '//'";
-        }
-
-        if (template.Contains("..", StringComparison.Ordinal))
-        {
-            return "содержит '..'";
-        }
-
-        if (template.Contains('#', StringComparison.Ordinal) || template.Contains('?', StringComparison.Ordinal))
-        {
-            return "содержит '#' или '?'";
-        }
-
-        if (template.Contains('\r') || template.Contains('\n'))
-        {
-            return "содержит перевод строки";
-        }
-
-        if (template.Contains('\\', StringComparison.Ordinal))
-        {
-            return "содержит '\\'";
-        }
-
-        return null;
     }
 
     private static void ValidateCredentials(ChannelConfiguration configuration, List<string> problems)

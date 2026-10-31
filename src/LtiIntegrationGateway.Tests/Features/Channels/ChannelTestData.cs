@@ -1,5 +1,5 @@
 using LtiIntegrationGateway.Features.Channels;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
 
 namespace LtiIntegrationGateway.Tests.Features.Channels;
 
@@ -15,7 +15,5 @@ internal static class ChannelTestData
         UserName: null,
         PerAttemptTimeoutMs: 30_000,
         OverallCapMs: 120_000,
-        RetryPolicy: new RetryPolicy([RetryRule.TransportError([1000, 2000, 4000])]),
-        AllowedMethods: ["GET", "POST"],
-        AllowedPaths: ["/api/contracts", "/api/contracts/{id}"]);
+        RetryPolicy: new RetryPolicy([RetryRule.TransportError([1000, 2000, 4000])]));
 }

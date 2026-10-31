@@ -24,8 +24,6 @@ public class ContractRegistryTests
                 {
                     new { match = "transport_error", statusCodes = Array.Empty<int>(), delaysMs = new[] { 100 } },
                 },
-                allowedMethods = new[] { "GET", "POST" },
-                allowedPaths = new[] { "/api/contracts" },
             },
         }));
 

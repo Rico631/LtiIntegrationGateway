@@ -1,10 +1,10 @@
 using LtiIntegrationGateway.Infrastructure.Management;
 using LtiIntegrationGateway.Infrastructure.OpenApi;
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts;
 using Microsoft.EntityFrameworkCore;
 
-namespace LtiIntegrationGateway.Features.Contracts;
+namespace LtiIntegrationGateway.Features.Contracts.UploadContractVersion;
 
 /// <summary>Загрузка OpenAPI-документа: создание черновика версии контракта канала.</summary>
 public sealed record UploadContractVersionCommand(string ChannelName, string Document);

@@ -1,10 +1,11 @@
+using LtiIntegrationGateway.Features.Channels.UpdateChannelDraft;
 using LtiIntegrationGateway.Infrastructure.Management;
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
 using LtiIntegrationGateway.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 
-namespace LtiIntegrationGateway.Features.Channels;
+namespace LtiIntegrationGateway.Features.Channels.GetChannelHealth;
 
 /// <summary>Запрос состояния канала по имени.</summary>
 public sealed record GetChannelHealthQuery(string ChannelName);

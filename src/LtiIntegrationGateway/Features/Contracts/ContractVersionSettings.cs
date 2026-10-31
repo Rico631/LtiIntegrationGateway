@@ -1,4 +1,5 @@
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts;
 
 namespace LtiIntegrationGateway.Features.Contracts;
 

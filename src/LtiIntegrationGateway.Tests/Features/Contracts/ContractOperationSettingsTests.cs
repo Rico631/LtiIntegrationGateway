@@ -1,5 +1,6 @@
 using LtiIntegrationGateway.Features.Contracts;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts;
 using LtiIntegrationGateway.Infrastructure.Routing;
 using LtiIntegrationGateway.Tests.TestSupport;
 using Microsoft.EntityFrameworkCore;
@@ -28,15 +29,15 @@ public class ContractOperationSettingsTests
         string method = "POST",
         string template = "/callbacks/contracts",
         string? operationId = "receiveContract") => new()
-    {
-        Id = Guid.NewGuid(),
-        ContractVersionId = VersionId,
-        HttpMethod = method,
-        Template = template,
-        OperationId = operationId,
-        Enabled = enabled,
-        RecipientQueue = queue,
-    };
+        {
+            Id = Guid.NewGuid(),
+            ContractVersionId = VersionId,
+            HttpMethod = method,
+            Template = template,
+            OperationId = operationId,
+            Enabled = enabled,
+            RecipientQueue = queue,
+        };
 
     [Test]
     public async Task Operation_queue_overrides_version_and_quota_comes_from_version()

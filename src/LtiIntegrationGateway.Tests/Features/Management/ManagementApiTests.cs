@@ -2,7 +2,7 @@ using System.Net;
 using System.Text.Json;
 using LtiIntegrationGateway.Contracts.Management.V1;
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Outbound;
 using LtiIntegrationGateway.Tests.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using ProtoRetryRule = LtiIntegrationGateway.Contracts.Management.V1.RetryRule;
@@ -11,10 +11,7 @@ namespace LtiIntegrationGateway.Tests.Features.Management;
 
 public class ManagementApiTests
 {
-    private static string SettingsJson(
-        string baseUrl = "https://bank-a.example",
-        string[]? methods = null,
-        string[]? paths = null) =>
+    private static string SettingsJson(string baseUrl = "https://bank-a.example") =>
         JsonSerializer.Serialize(new
         {
             baseUrl,
@@ -25,8 +22,6 @@ public class ManagementApiTests
             {
                 new { match = "transport_error", statusCodes = Array.Empty<int>(), delaysMs = new[] { 100 } },
             },
-            allowedMethods = methods ?? ["GET"],
-            allowedPaths = paths ?? ["/api/contracts"],
         });
 
     private static StringContent Body(string json) => ManagementApi.Json(json);
@@ -38,11 +33,11 @@ public class ManagementApiTests
             settings = JsonSerializer.Deserialize<JsonElement>(SettingsJson(baseUrl)),
         }));
 
-    private static StringContent UpdateDraftBody(int revision, string baseUrl, string[] methods) =>
+    private static StringContent UpdateDraftBody(int revision, string baseUrl) =>
         Body(JsonSerializer.Serialize(new
         {
             revision,
-            settings = JsonSerializer.Deserialize<JsonElement>(SettingsJson(baseUrl, methods)),
+            settings = JsonSerializer.Deserialize<JsonElement>(SettingsJson(baseUrl)),
         }));
 
     private static async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response)
@@ -90,7 +85,7 @@ public class ManagementApiTests
 
         var updated = await ReadJsonAsync(await client.PatchAsync(
             "/v1/channels/bank-a/draft",
-            UpdateDraftBody(1, "https://bank-a.example", ["GET", "POST"])));
+            UpdateDraftBody(1, "https://bank-a.example")));
 
         await Assert.That(updated.GetProperty("succeeded").GetBoolean()).IsTrue();
 
@@ -103,15 +98,12 @@ public class ManagementApiTests
         await Assert.That(activated.GetProperty("succeeded").GetBoolean()).IsTrue();
 
         var channelJson = await ReadJsonAsync(await client.GetAsync("/v1/channels/bank-a"));
-        var methods = channelJson.GetProperty("channel").GetProperty("activeSettings")
-            .GetProperty("allowedMethods")
-            .EnumerateArray()
-            .Select(item => item.GetString() ?? string.Empty)
-            .ToArray();
+        var activeSettings = channelJson.GetProperty("channel").GetProperty("activeSettings");
 
-        await Assert.That(methods).IsEquivalentTo(new[] { "GET", "POST" });
+        await Assert.That(activeSettings.TryGetProperty("allowedMethods", out _)).IsFalse();
+        await Assert.That(activeSettings.TryGetProperty("allowedPaths", out _)).IsFalse();
 
-        await client.PatchAsync("/v1/channels/bank-a/draft", UpdateDraftBody(0, "https://bank-a2.example", ["GET"]));
+        await client.PatchAsync("/v1/channels/bank-a/draft", UpdateDraftBody(0, "https://bank-a2.example"));
         await client.PostAsync("/v1/channels/bank-a/revisions/2/publish", null);
         await client.PostAsync("/v1/channels/bank-a/revisions/2/activate", null);
 
@@ -134,21 +126,21 @@ public class ManagementApiTests
         using var client = ManagementApi.CreateClient(factory);
 
         await client.PostAsync("/v1/channels", CreateChannelBody("bank-a"));
-        await client.PatchAsync("/v1/channels/bank-a/draft", UpdateDraftBody(1, "https://bank-a.example", ["GET"]));
+        await client.PatchAsync("/v1/channels/bank-a/draft", UpdateDraftBody(1, "https://bank-a.example"));
         await client.PostAsync("/v1/channels/bank-a/revisions/1/publish", null);
         await client.PostAsync("/v1/channels/bank-a/revisions/1/activate", null);
 
-        // Новый черновик с недопустимым URL и недопустимым шаблоном пути.
+        // Новый черновик с недопустимым URL.
         await client.PatchAsync("/v1/channels/bank-a/draft", Body(JsonSerializer.Serialize(new
         {
             revision = 0,
-            settings = JsonSerializer.Deserialize<JsonElement>(SettingsJson("http://insecure.example", ["GET"], ["callbacks"])),
+            settings = JsonSerializer.Deserialize<JsonElement>(SettingsJson("http://insecure.example")),
         })));
 
         var publish = await ReadJsonAsync(await client.PostAsync("/v1/channels/bank-a/revisions/2/publish", null));
 
         await Assert.That(publish.GetProperty("succeeded").GetBoolean()).IsFalse();
-        await Assert.That(publish.GetProperty("problems").GetArrayLength()).IsGreaterThanOrEqualTo(2);
+        await Assert.That(publish.GetProperty("problems").GetArrayLength()).IsGreaterThanOrEqualTo(1);
 
         var channelJson = await ReadJsonAsync(await client.GetAsync("/v1/channels/bank-a"));
         var active = channelJson.GetProperty("channel").GetProperty("revisions")
@@ -356,7 +348,5 @@ public class ManagementApiTests
         {
             new ProtoRetryRule { Match = "transport_error", DelaysMs = { 100 } },
         },
-        AllowedMethods = { "GET" },
-        AllowedPaths = { "/api/contracts" },
     };
 }

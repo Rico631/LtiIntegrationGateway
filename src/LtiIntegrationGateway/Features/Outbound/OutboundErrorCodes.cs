@@ -6,7 +6,6 @@ public static class OutboundErrorCodes
     public const string ProductNotAllowed = "PRODUCT_NOT_ALLOWED";
     public const string ChannelNotAllowed = "CHANNEL_NOT_ALLOWED";
     public const string ChannelNotActive = "CHANNEL_NOT_ACTIVE";
-    public const string MethodNotAllowed = "METHOD_NOT_ALLOWED";
     public const string PathNotAllowed = "PATH_NOT_ALLOWED";
     public const string SecretNotConfigured = "SECRET_NOT_CONFIGURED";
     public const string AuthTypeUnsupported = "AUTH_TYPE_UNSUPPORTED";

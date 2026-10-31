@@ -2,9 +2,12 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using LtiIntegrationGateway.Contracts.Messages.V1;
 using LtiIntegrationGateway.Features.Inbound;
+using LtiIntegrationGateway.Infrastructure.Observability;
 using LtiIntegrationGateway.Infrastructure.OpenApi;
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Inbound;
 using LtiIntegrationGateway.Infrastructure.Rebus;
 using LtiIntegrationGateway.Infrastructure.Routing;
 using LtiIntegrationGateway.Infrastructure.Security;
@@ -126,6 +129,7 @@ public sealed class InboundFixture : IAsyncDisposable
         var services = new ServiceCollection();
 
         services.AddLogging();
+        services.AddSingleton<GatewayMetrics>();
         services.AddSingleton<ISecretStore>(Secrets);
         services.AddSingleton(publisher);
         services.AddSingleton(_schemaCache);
@@ -144,6 +148,8 @@ public sealed class InboundFixture : IAsyncDisposable
     public TestSecretStore Secrets { get; } = new();
 
     public IServiceProvider Services => _services;
+
+    public GatewayMetrics Metrics => _services.GetRequiredService<GatewayMetrics>();
 
     public InboundRequestHandler Handler => _services.GetRequiredService<InboundRequestHandler>();
 

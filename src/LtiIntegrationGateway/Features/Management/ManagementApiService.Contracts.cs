@@ -1,6 +1,13 @@
 using Grpc.Core;
 using LtiIntegrationGateway.Contracts;
 using LtiIntegrationGateway.Contracts.Management.V1;
+using LtiIntegrationGateway.Features.Contracts.ActivateContractVersion;
+using LtiIntegrationGateway.Features.Contracts.GetContractVersion;
+using LtiIntegrationGateway.Features.Contracts.ListContractOperations;
+using LtiIntegrationGateway.Features.Contracts.PublishContractVersion;
+using LtiIntegrationGateway.Features.Contracts.UpdateContractOperationSettings;
+using LtiIntegrationGateway.Features.Contracts.UpdateContractVersionSettings;
+using LtiIntegrationGateway.Features.Contracts.UploadContractVersion;
 
 namespace LtiIntegrationGateway.Features.Management;
 
@@ -19,7 +26,7 @@ public sealed partial class ManagementApiService
         }
 
         var result = await uploadContractVersion.HandleAsync(
-            new Contracts.UploadContractVersionCommand(request.ChannelName, request.Document),
+            new UploadContractVersionCommand(request.ChannelName, request.Document),
             context.CancellationToken);
 
         return ToContractResponse(result.Problems.Count == 0, result.Version, result.SourceFormat, result.Problems, result.Warnings);
@@ -37,7 +44,7 @@ public sealed partial class ManagementApiService
         }
 
         var result = await publishContractVersion.HandleAsync(
-            new Contracts.PublishContractVersionCommand(request.ChannelName, request.Version),
+            new PublishContractVersionCommand(request.ChannelName, request.Version),
             context.CancellationToken);
 
         ThrowIfMissing(result.Version, result.Problems);
@@ -57,7 +64,7 @@ public sealed partial class ManagementApiService
         }
 
         var result = await activateContractVersion.HandleAsync(
-            new Contracts.ActivateContractVersionCommand(request.ChannelName, request.Version),
+            new ActivateContractVersionCommand(request.ChannelName, request.Version),
             context.CancellationToken);
 
         ThrowIfMissing(result.Version, result.Problems);
@@ -70,7 +77,7 @@ public sealed partial class ManagementApiService
         ServerCallContext context)
     {
         var result = await listContractOperations.HandleAsync(
-            new Contracts.ListContractOperationsQuery(request.ChannelName, request.Version),
+            new ListContractOperationsQuery(request.ChannelName, request.Version),
             context.CancellationToken);
 
         if (result.Problems.Count > 0)
@@ -106,7 +113,7 @@ public sealed partial class ManagementApiService
         var target = $"{request.ChannelName}:v{request.Version}";
 
         var result = await getContractVersion.HandleAsync(
-            new Contracts.GetContractVersionQuery(request.ChannelName, request.Version),
+            new GetContractVersionQuery(request.ChannelName, request.Version),
             context.CancellationToken);
 
         if (result.ContractVersion is null)
@@ -153,7 +160,7 @@ public sealed partial class ManagementApiService
             return ToContractResponse(false, request.Version, null, problems, []);
         }
 
-        var settings = new Contracts.ContractVersionSettings(
+        var settings = new LtiIntegrationGateway.Features.Contracts.ContractVersionSettings(
             request.Settings!.RecipientQueue,
             authType,
             request.Settings.ConfigKey,
@@ -163,7 +170,7 @@ public sealed partial class ManagementApiService
             request.Settings.RateLimitWindowSeconds > 0 ? request.Settings.RateLimitWindowSeconds : null);
 
         var result = await updateContractVersionSettings.HandleAsync(
-            new Contracts.UpdateContractVersionSettingsCommand(request.ChannelName, request.Version, settings),
+            new UpdateContractVersionSettingsCommand(request.ChannelName, request.Version, settings),
             context.CancellationToken);
 
         ThrowIfMissing(result.Version, result.Problems);
@@ -187,12 +194,12 @@ public sealed partial class ManagementApiService
 
         // Presence в proto3 optional различает «поле не передано» и «передано пустое/ноль»:
         // отсутствующее поле не меняет настройку.
-        var patch = new Contracts.ContractOperationSettingsPatch(
+        var patch = new ContractOperationSettingsPatch(
             request.HasEnabled ? request.Enabled : null,
             request.HasRecipientQueue ? request.RecipientQueue : null);
 
         var result = await updateContractOperationSettings.HandleAsync(
-            new Contracts.UpdateContractOperationSettingsCommand(
+            new UpdateContractOperationSettingsCommand(
                 request.ChannelName,
                 request.Version,
                 request.OperationId,
@@ -207,7 +214,7 @@ public sealed partial class ManagementApiService
         return ToContractResponse(result.Problems.Count == 0, result.Version, null, result.Problems, []);
     }
 
-    private static ContractOperationInfo ToOperationInfo(Contracts.ContractOperationDetails operation) => new()
+    private static ContractOperationInfo ToOperationInfo(ContractOperationDetails operation) => new()
     {
         HttpMethod = operation.HttpMethod,
         Template = operation.Template,
@@ -216,7 +223,8 @@ public sealed partial class ManagementApiService
         RecipientQueue = operation.RecipientQueue ?? string.Empty,
     };
 
-    private static ContractVersionSettings ToSettings(Contracts.ContractVersionSettings settings) => new()
+    private static LtiIntegrationGateway.Contracts.Management.V1.ContractVersionSettings ToSettings(
+        LtiIntegrationGateway.Features.Contracts.ContractVersionSettings settings) => new()
     {
         RecipientQueue = settings.RecipientQueue ?? string.Empty,
         AuthType = ChannelMapping.FormatAuthType(settings.AuthType),

@@ -1,14 +1,30 @@
 using System.Threading.RateLimiting;
 using LtiIntegrationGateway.Contracts.Messages.V1;
 using LtiIntegrationGateway.Features.Channels;
-using LtiIntegrationGateway.Features.Contracts;
+using LtiIntegrationGateway.Features.Channels.ActivateChannelRevision;
+using LtiIntegrationGateway.Features.Channels.CreateChannel;
+using LtiIntegrationGateway.Features.Channels.GetChannel;
+using LtiIntegrationGateway.Features.Channels.GetChannelHealth;
+using LtiIntegrationGateway.Features.Channels.PublishChannelRevision;
+using LtiIntegrationGateway.Features.Channels.RollbackChannelRevision;
+using LtiIntegrationGateway.Features.Channels.UpdateChannelDraft;
+using LtiIntegrationGateway.Features.Contracts.ActivateContractVersion;
+using LtiIntegrationGateway.Features.Contracts.GetContractVersion;
+using LtiIntegrationGateway.Features.Contracts.ListContractOperations;
+using LtiIntegrationGateway.Features.Contracts.PublishContractVersion;
+using LtiIntegrationGateway.Features.Contracts.UpdateContractOperationSettings;
+using LtiIntegrationGateway.Features.Contracts.UpdateContractVersionSettings;
+using LtiIntegrationGateway.Features.Contracts.UploadContractVersion;
 using LtiIntegrationGateway.Features.Host;
 using LtiIntegrationGateway.Features.Inbound;
 using LtiIntegrationGateway.Features.Management;
 using LtiIntegrationGateway.Features.Outbound;
 using LtiIntegrationGateway.Features.ProductRoutes;
+using LtiIntegrationGateway.Features.ProductRoutes.GetProductRoute;
+using LtiIntegrationGateway.Infrastructure.Health;
 using LtiIntegrationGateway.Infrastructure.Http;
 using LtiIntegrationGateway.Infrastructure.Management;
+using LtiIntegrationGateway.Infrastructure.Observability;
 using LtiIntegrationGateway.Infrastructure.OpenApi;
 using LtiIntegrationGateway.Infrastructure.Persistence;
 using LtiIntegrationGateway.Infrastructure.Rebus;
@@ -35,7 +51,10 @@ builder.Services.AddDbContext<GatewayDbContext>((services, options) =>
     options.UseSqlite(registeredConnectionString);
 });
 
-builder.Services.AddHealthChecks();
+builder.Services.AddGatewayObservability(builder.Configuration, builder.Environment);
+builder.Services.AddSingleton<DatabaseHealthCheck>();
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("storage", tags: ["ready"]);
 builder.Services.AddGatewayRebus();
 
 builder.Services.AddScoped<ChannelConfigurationValidator>();
@@ -170,6 +189,12 @@ endpointRouteBuilder.DataSources.Add(app.Services.GetRequiredService<InboundEndp
 app.MapGrpcService<ManagementApiService>();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks(
+    "/health/ready",
+    new HealthCheckOptions
+    {
+        Predicate = registration => registration.Tags.Contains("ready"),
+    });
 
 app.Run();
 

@@ -246,8 +246,8 @@ enum ProblemSeverity {
 
 // Проблема доменной проверки: код, безопасное описание и серьёзность; используется в problems.
 message OperationProblem {
-  // Код проблемы — префикс исходного сообщения проверки: channel, name, base_url, allowed_methods,
-  // allowed_paths, retry_policy, config_key, auth_type, settings, revision, version, path, method,
+  // Код проблемы — префикс исходного сообщения проверки: channel, name, base_url,
+  // retry_policy, config_key, auth_type, settings, revision, version, path, method,
   // template, schema, ref, format, operation_id, conflict, operation, queue, address, rate_limit.
   // Устойчивый признак для программной обработки; текст проблемы может уточняться без смены
   // контракта.
@@ -304,12 +304,6 @@ message ChannelSettings {
 
   // Политика повторов; требуется хотя бы одно правило.
   repeated RetryRule retry_policy = 8;
-
-  // Разрешённые HTTP-методы в верхнем регистре: GET, POST, PUT, PATCH, DELETE. Хотя бы один.
-  repeated string allowed_methods = 9;
-
-  // Разрешённые шаблоны относительных путей, например /api/contracts/{id}. Хотя бы один.
-  repeated string allowed_paths = 10;
 }
 
 // Краткая информация о ревизии канала: номер и состояние.

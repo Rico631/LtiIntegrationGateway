@@ -1,6 +1,7 @@
 using Grpc.Core;
 using LtiIntegrationGateway.Contracts;
 using LtiIntegrationGateway.Contracts.Management.V1;
+using LtiIntegrationGateway.Features.ProductRoutes.GetProductRoute;
 using Microsoft.EntityFrameworkCore;
 
 namespace LtiIntegrationGateway.Features.Management;
@@ -42,7 +43,7 @@ public sealed partial class ManagementApiService
         ServerCallContext context)
     {
         var result = await getProductRoute.HandleAsync(
-            new ProductRoutes.GetProductRouteQuery(request.ProductId),
+            new GetProductRouteQuery(request.ProductId),
             context.CancellationToken);
 
         if (result.Route is null)

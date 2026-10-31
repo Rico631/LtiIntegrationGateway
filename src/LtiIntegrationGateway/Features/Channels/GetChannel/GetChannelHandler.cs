@@ -1,8 +1,9 @@
+using LtiIntegrationGateway.Features.Channels.UpdateChannelDraft;
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
 using Microsoft.EntityFrameworkCore;
 
-namespace LtiIntegrationGateway.Features.Channels;
+namespace LtiIntegrationGateway.Features.Channels.GetChannel;
 
 /// <summary>Чтение канала вместе с активной ревизией и перечнем ревизий.</summary>
 public sealed record GetChannelQuery(Guid ChannelId);

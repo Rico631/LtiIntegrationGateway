@@ -18,9 +18,7 @@ public class ContractSettingsApiTests
             "authType": "none",
             "perAttemptTimeoutMs": 5000,
             "overallCapMs": 30000,
-            "retryPolicy": [ { "match": "transport_error", "statusCodes": [], "delaysMs": [100] } ],
-            "allowedMethods": ["GET", "POST"],
-            "allowedPaths": ["/api/contracts"]
+            "retryPolicy": [ { "match": "transport_error", "statusCodes": [], "delaysMs": [100] } ]
           }
         }
         """));

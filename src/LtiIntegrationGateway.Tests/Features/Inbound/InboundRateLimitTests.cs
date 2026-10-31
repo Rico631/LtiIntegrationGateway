@@ -1,6 +1,7 @@
 using System.Net;
 using LtiIntegrationGateway.Features.Contracts;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts;
 using LtiIntegrationGateway.Infrastructure.Routing;
 using LtiIntegrationGateway.Tests.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
