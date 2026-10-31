@@ -65,6 +65,10 @@ public sealed class GatewayWebApplicationFactory : WebApplicationFactory<Program
                 settings["ConnectionStrings:Gateway"] = _connectionString;
             }
 
+            // Фоновая служба доставки по умолчанию выключена: тесты вызывают DispatchPendingAsync
+            // напрямую и не должны зависеть от таймера.
+            settings["Outbound:DeliveryDispatcher:Enabled"] = "false";
+
             foreach (var pair in _extraSettings)
             {
                 settings[pair.Key] = pair.Value;

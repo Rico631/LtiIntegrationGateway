@@ -34,6 +34,12 @@ public sealed class OutboundOperation
 
     public string? ErrorCode { get; set; }
 
+    /// <summary>
+    /// Идентификатор бизнес-процесса первого запроса: сохраняется, чтобы повторный результат был
+    /// идентичен первому.
+    /// </summary>
+    public string? CorrelationId { get; set; }
+
     public int AttemptCount { get; set; }
 
     /// <summary>Адрес доставки результата, проверенный по маршруту продукта.</summary>

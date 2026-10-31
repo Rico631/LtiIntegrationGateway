@@ -3,6 +3,7 @@ using LtiIntegrationGateway.Contracts.Messages.V1;
 using LtiIntegrationGateway.Features.Outbound;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
 using LtiIntegrationGateway.Tests.TestSupport;
+using Microsoft.EntityFrameworkCore;
 
 namespace LtiIntegrationGateway.Tests.Features.Outbound;
 
@@ -114,5 +115,16 @@ public class OutboundIdempotencyTests
         var delivered = await fixture.Results.WaitForSingleAsync(DeliveryTimeout);
 
         await Assert.That(delivered.ErrorCode).IsEqualTo(OutboundErrorCodes.ProductNotAllowed);
+        await Assert.That(delivered.Outcome).IsEqualTo(Outcome.GatewayRefused);
+
+        // Состояние чужой операции и журнал не меняются: сохранённый результат не отдаётся,
+        // а запись отказа не создаётся.
+        using var verifyDb = fixture.CreateDb();
+        var operation = await verifyDb.OutboundOperations.SingleAsync();
+
+        await Assert.That(operation.ProductId).IsEqualTo("another-product");
+        await Assert.That(operation.Status).IsEqualTo(OutboundOperationStatus.Completed);
+        await Assert.That(operation.Outcome).IsEqualTo(OutcomeNames.HttpResponse);
+        await Assert.That(await verifyDb.OutboundMessageLogs.CountAsync()).IsEqualTo(0);
     }
 }

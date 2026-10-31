@@ -258,6 +258,7 @@ public sealed class InboundRequestHandler(
             DeliveryStatus = status,
             ErrorCode = errorCode,
             ReceivedAt = receivedAt,
+            ReceivedAtUnixMs = receivedAt.ToUnixTimeMilliseconds(),
         };
     }
 

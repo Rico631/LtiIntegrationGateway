@@ -72,12 +72,7 @@ public sealed partial class ManagementApiService
 
         var response = new ListContractOperationsResponse();
 
-        response.Operations.AddRange(result.Operations.Select(operation => new ContractOperationInfo
-        {
-            HttpMethod = operation.HttpMethod,
-            Template = operation.Template,
-            OperationId = operation.OperationId ?? string.Empty,
-        }));
+        response.Operations.AddRange(result.Operations.Select(ToOperationInfo));
 
         return response;
     }
@@ -109,12 +104,7 @@ public sealed partial class ManagementApiService
             Settings = ToSettings(details.Settings),
         };
 
-        response.Operations.AddRange(details.Operations.Select(operation => new ContractOperationInfo
-        {
-            HttpMethod = operation.HttpMethod,
-            Template = operation.Template,
-            OperationId = operation.OperationId ?? string.Empty,
-        }));
+        response.Operations.AddRange(details.Operations.Select(ToOperationInfo));
 
         return response;
     }
@@ -153,6 +143,45 @@ public sealed partial class ManagementApiService
 
         return ToContractResponse(result.Problems.Count == 0, result.Version, null, result.Problems, []);
     }
+
+    public override async Task<ContractOperationResponse> UpdateContractOperationSettings(
+        UpdateContractOperationSettingsRequest request,
+        ServerCallContext context)
+    {
+        // Presence в proto3 optional различает «поле не передано» и «передано пустое/ноль»:
+        // отсутствующее поле не меняет настройку.
+        var patch = new Contracts.ContractOperationSettingsPatch(
+            request.HasEnabled ? request.Enabled : null,
+            request.HasRecipientQueue ? request.RecipientQueue : null,
+            request.HasRateLimitPermit ? request.RateLimitPermit : null,
+            request.HasRateLimitWindowSeconds ? request.RateLimitWindowSeconds : null);
+
+        var result = await _updateContractOperationSettings.HandleAsync(
+            new Contracts.UpdateContractOperationSettingsCommand(
+                request.ChannelName,
+                request.Version,
+                request.OperationId,
+                patch),
+            context.CancellationToken);
+
+        if (result.NotFound)
+        {
+            throw new RpcException(new Status(StatusCode.NotFound, "contract operation not found"));
+        }
+
+        return ToContractResponse(result.Problems.Count == 0, result.Version, null, result.Problems, []);
+    }
+
+    private static ContractOperationInfo ToOperationInfo(Contracts.ContractOperationDetails operation) => new()
+    {
+        HttpMethod = operation.HttpMethod,
+        Template = operation.Template,
+        OperationId = operation.OperationId ?? string.Empty,
+        Enabled = operation.Enabled,
+        RecipientQueue = operation.RecipientQueue ?? string.Empty,
+        RateLimitPermit = operation.RateLimitPermit ?? 0,
+        RateLimitWindowSeconds = operation.RateLimitWindowSeconds ?? 0,
+    };
 
     private static ContractVersionSettings ToSettings(Contracts.ContractVersionSettings settings) => new()
     {

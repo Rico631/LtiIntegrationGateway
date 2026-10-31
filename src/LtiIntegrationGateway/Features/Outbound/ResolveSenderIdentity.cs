@@ -1,4 +1,5 @@
 using LtiIntegrationGateway.Infrastructure.Persistence;
+using LtiIntegrationGateway.Infrastructure.Rebus;
 using Microsoft.EntityFrameworkCore;
 
 namespace LtiIntegrationGateway.Features.Outbound;
@@ -9,6 +10,11 @@ public sealed record SenderIdentityResult(
     string? ErrorMessage,
     IReadOnlyCollection<string> AllowedAddresses);
 
+/// <summary>
+/// Проверка отправителя и адреса результата: адрес сравнивается с вычисленным
+/// <c>&lt;product_id&gt;.inbox</c> (ADR §10.2). Список адресов в маршруте остаётся для обратной
+/// совместимости чтения, но источником истины не является.
+/// </summary>
 public sealed class ResolveSenderIdentityHandler(GatewayDbContext db)
 {
     public async Task<SenderIdentityResult> HandleAsync(
@@ -28,7 +34,6 @@ public sealed class ResolveSenderIdentityHandler(GatewayDbContext db)
         var route = await db.ProductRoutes
             .AsNoTracking()
             .Include(entity => entity.AllowedChannels)
-            .Include(entity => entity.AllowedQueueAddresses)
             .SingleOrDefaultAsync(entity => entity.ProductId == productId, cancellationToken);
 
         if (route is null)
@@ -39,11 +44,10 @@ public sealed class ResolveSenderIdentityHandler(GatewayDbContext db)
                 []);
         }
 
-        var addresses = route.AllowedQueueAddresses
-            .Select(entity => entity.Address)
-            .ToArray();
+        var expectedAddress = QueueNames.ProductInbox(productId);
+        IReadOnlyCollection<string> addresses = [expectedAddress];
 
-        if (!addresses.Contains(senderAddress, StringComparer.Ordinal))
+        if (!string.Equals(senderAddress, expectedAddress, StringComparison.Ordinal))
         {
             return new SenderIdentityResult(
                 OutboundErrorCodes.ProductNotAllowed,
@@ -66,3 +70,4 @@ public sealed class ResolveSenderIdentityHandler(GatewayDbContext db)
         return new SenderIdentityResult(null, null, addresses);
     }
 }
+

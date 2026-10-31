@@ -184,6 +184,64 @@ public class ManagementApiTests
     }
 
     [Test]
+    public async Task Product_route_without_address_returns_computed_inbox()
+    {
+        using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
+        using var client = ManagementApi.CreateClient(factory);
+
+        var registered = await ReadJsonAsync(await client.PutAsync(
+            "/v1/products/dpv/route",
+            Body(JsonSerializer.Serialize(new
+            {
+                productId = "dpv",
+                allowedChannels = new[] { "bank-a" },
+            }))));
+
+        await Assert.That(registered.GetProperty("succeeded").GetBoolean()).IsTrue();
+
+        var route = await ReadJsonAsync(await client.GetAsync("/v1/products/dpv/route"));
+
+        await Assert.That(route.GetProperty("allowedQueueAddresses").EnumerateArray()
+            .Select(item => item.GetString() ?? string.Empty).ToArray()).IsEquivalentTo(new[] { "dpv.inbox" });
+    }
+
+    [Test]
+    public async Task Product_route_with_foreign_queue_is_rejected_with_address_problem()
+    {
+        using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
+        using var client = ManagementApi.CreateClient(factory);
+
+        await client.PutAsync(
+            "/v1/products/dpv/route",
+            Body(JsonSerializer.Serialize(new
+            {
+                productId = "dpv",
+                allowedChannels = new[] { "bank-a" },
+            })));
+
+        using var channel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(channel);
+
+        var rejected = await grpc.RegisterProductRouteAsync(
+            new RegisterProductRouteRequest
+            {
+                ProductId = "dpv",
+                AllowedQueueAddresses = { "other.queue" },
+            },
+            ManagementApi.Call());
+
+        await Assert.That(rejected.Succeeded).IsFalse();
+        await Assert.That(rejected.Problems.Any(problem => problem.Code == "address")).IsTrue();
+
+        var route = await grpc.GetProductRouteAsync(
+            new GetProductRouteRequest { ProductId = "dpv" },
+            ManagementApi.Call());
+
+        // Отклонённая регистрация не меняет существующий маршрут: адрес остаётся вычисленным.
+        await Assert.That(route.AllowedQueueAddresses.ToArray()).IsEquivalentTo(new[] { "dpv.inbox" });
+    }
+
+    [Test]
     public async Task Unknown_product_route_returns_not_found()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());

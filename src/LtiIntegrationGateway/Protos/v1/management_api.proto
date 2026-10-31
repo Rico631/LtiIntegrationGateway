@@ -42,6 +42,7 @@ package lti.gateway.management.v1;
 option csharp_namespace = "LtiIntegrationGateway.Contracts.Management.V1";
 
 import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
 
 // Управляющий API шлюза.
 //
@@ -72,6 +73,19 @@ service ManagementService {
   // REST: GET /v1/channels/{channel_name}
   rpc GetChannel (GetChannelRequest) returns (GetChannelResponse) {
     option (google.api.http) = { get: "/v1/channels/{channel_name}" };
+  }
+
+  // Возвращает состояние канала: наличие активной ревизии, признак настроенного секрета, срок
+  // действия клиентского сертификата и последние ошибки обмена (ADR §13, §15.2).
+  //
+  // Отсутствие секрета или непригодный сертификат не являются ошибкой вызова: это диагностическое
+  // состояние в ответе (secret_configured = false). Канал без активной ревизии возвращается с
+  // состоянием NO_ACTIVE_REVISION и остальной диагностикой. Если канал не найден, возвращается
+  // gRPC NotFound (REST 404). Операция только читает данные и фиксируется в аудите управляющих
+  // операций; значения секретов, тела сообщений и заголовки в ответ не попадают.
+  // REST: GET /v1/channels/{channel_name}/health
+  rpc GetChannelHealth (GetChannelHealthRequest) returns (GetChannelHealthResponse) {
+    option (google.api.http) = { get: "/v1/channels/{channel_name}/health" };
   }
 
   // Изменяет настройки черновика канала.
@@ -113,8 +127,10 @@ service ManagementService {
   // Создаёт или полностью заменяет маршрут продукта.
   //
   // Маршрут определяет, к каким каналам продукт имеет доступ и в какие адреса очередей шлюз может
-  // доставлять результаты. Отказ возвращается в problems, если product_id не соответствует формату,
-  // списки пусты или содержат пустые значения.
+  // доставлять результаты. Пустой список allowed_queue_addresses допустим и означает вычисленный
+  // адрес <product_id>.inbox; непустой список должен совпадать с вычисленным адресом, иначе
+  // регистрация отклоняется с проблемой address, а существующий маршрут не меняется. Отказ также
+  // возвращается в problems, если product_id не соответствует формату или не указан ни один канал.
   // REST: PUT /v1/products/{product_id}/route
   rpc RegisterProductRoute (RegisterProductRouteRequest) returns (OperationResponse) {
     option (google.api.http) = { put: "/v1/products/{product_id}/route" body: "*" };
@@ -159,10 +175,13 @@ service ManagementService {
     option (google.api.http) = { post: "/v1/channels/{channel_name}/contracts/{version}/activate" };
   }
 
-  // Возвращает операции версии контракта.
+  // Возвращает операции версии контракта с настройками приёма.
   //
-  // Для каждой операции отдаются HTTP-метод, шаблон пути и operationId (пустая строка, если в
-  // документе он не задан). Если версия не найдена, возвращается gRPC NotFound.
+  // Для каждой операции отдаются HTTP-метод, шаблон пути, operationId (пустая строка, если в
+  // документе он не задан) и настройки операции: enabled, recipient_queue, rate_limit_permit,
+  // rate_limit_window_seconds. Отсутствие переопределения очереди выражается пустой строкой,
+  // отсутствие переопределения квоты и окна — нулём. Если версия не найдена, возвращается gRPC
+  // NotFound.
   // REST: GET /v1/channels/{channel_name}/contracts/{version}/operations
   rpc ListContractOperations (ListContractOperationsRequest) returns (ListContractOperationsResponse) {
     option (google.api.http) = { get: "/v1/channels/{channel_name}/contracts/{version}/operations" };
@@ -185,6 +204,23 @@ service ManagementService {
   // REST: PATCH /v1/channels/{channel_name}/contracts/{version}/settings
   rpc UpdateContractVersionSettings (UpdateContractVersionSettingsRequest) returns (ContractOperationResponse) {
     option (google.api.http) = { patch: "/v1/channels/{channel_name}/contracts/{version}/settings" body: "*" };
+  }
+
+  // Изменяет настройки одной операции версии контракта: признак обслуживания, очередь получателя и
+  // квоту частоты.
+  //
+  // Передаются только изменяемые поля: отсутствующее поле остаётся без изменений. Операции
+  // извлекаются из документа при публикации, поэтому настройки задаются для опубликованной версии;
+  // для черновика операций ещё нет и запрос возвращает gRPC NotFound (REST 404). Изменение
+  // отменённой версии (superseded) отклоняется с проблемой version, неизвестная операция или
+  // операция без operationId в документе — gRPC NotFound (REST 404), пустой набор полей — проблема
+  // settings, неположительные значения квоты — проблема rate_limit, пустой path-параметр
+  // operation_id — проблема operation_id. Для активной версии
+  // изменение применяется к работающим маршрутам без перезапуска; при отказе каталога маршрутов
+  // действует прежний набор. Операция фиксируется в аудите управляющих операций.
+  // REST: PATCH /v1/channels/{channel_name}/contracts/{version}/operations/{operation_id}
+  rpc UpdateContractOperationSettings (UpdateContractOperationSettingsRequest) returns (ContractOperationResponse) {
+    option (google.api.http) = { patch: "/v1/channels/{channel_name}/contracts/{version}/operations/{operation_id}" body: "*" };
   }
 
   // Возвращает состояние исходящей операции по идентификатору сообщения.
@@ -318,6 +354,77 @@ message GetChannelResponse {
   ChannelInfo channel = 1;
 }
 
+// Запрос состояния канала.
+message GetChannelHealthRequest {
+  // Имя существующего канала; незарегистрированное имя — gRPC NotFound (REST 404).
+  // Пустая строка трактуется как неизвестный канал.
+  string channel_name = 1;
+}
+
+// Состояние канала: активная ревизия, настройка секрета, срок сертификата и последние ошибки.
+// Заполняется шлюзом; потребитель только читает поля.
+message GetChannelHealthResponse {
+  // Имя канала, для которого построено состояние; совпадает с channel_name запроса.
+  string channel_name = 1;
+
+  // Состояние канала: ACTIVE — активная ревизия есть, NO_ACTIVE_REVISION — активной ревизии нет.
+  // Пустая строка не возвращается: одно из двух значений заполнено всегда.
+  string state = 2;
+
+  // Номер активной ревизии; 0 означает, что активной ревизии нет (тогда state = NO_ACTIVE_REVISION).
+  int32 active_revision = 3;
+
+  // Признак обеспеченности активной ревизии секретом: true — тип авторизации none (секрет не
+  // требуется) либо материал по ключу конфигурации найден и пригоден к использованию; false — активной
+  // ревизии нет, config_key пуст для типа, требующего секрет, значение по ключу отсутствует, либо
+  // клиентский сертификат не разбирается, не имеет приватного ключа, истёк или ещё не вступил в силу.
+  bool secret_configured = 4;
+
+  // Имя ключа конфигурации, по которому активная ревизия читает секрет или клиентский сертификат;
+  // пустая строка — ключ не задан или активной ревизии нет. Значение секрета не возвращается никогда.
+  string secret_config_key = 5;
+
+  // Срок действия клиентского сертификата активной ревизии в UTC. Заполняется и для непригодного
+  // сертификата (истёкшего или ещё не вступившего в силу), если материал разбирается; отсутствует,
+  // если тип авторизации не client_certificate, активной ревизии нет или материал не разбирается.
+  google.protobuf.Timestamp certificate_expires_at = 6;
+
+  // Последние ошибки обмена по каналу: не более пяти записей на направление, от новых к старым.
+  // Тела сообщений, заголовки и тексты ошибок в ответ не попадают.
+  repeated ChannelHealthError errors = 7;
+
+  // Момент формирования ответа в UTC; используется для оценки актуальности данных.
+  google.protobuf.Timestamp checked_at = 8;
+}
+
+// Ошибка обмена по каналу для диагностики: без тел сообщений, заголовков и значений секретов.
+message ChannelHealthError {
+  // Момент возникновения ошибки в UTC: время создания исходящей записи журнала или время приёма
+  // входящего вызова.
+  google.protobuf.Timestamp occurred_at = 1;
+
+  // Направление обмена: outbound — исходящий вызов внешней системы, inbound — входящий вызов
+  // шлюза. Пустая строка не возвращается.
+  string direction = 2;
+
+  // Код ошибки из журнала; пустая строка не возвращается, потому что записи без кода в выборку не
+  // попадают. Множество кодов не закрыто и зависит от направления. Для исходящих (direction =
+  // outbound) это коды OutboundErrorCodes: PRODUCT_NOT_ALLOWED, CHANNEL_NOT_ALLOWED,
+  // CHANNEL_NOT_ACTIVE, METHOD_NOT_ALLOWED, PATH_NOT_ALLOWED, SECRET_NOT_CONFIGURED,
+  // AUTH_TYPE_UNSUPPORTED, TIMEOUT, CONNECTION_FAILED, TLS_FAILED, RETRIES_EXHAUSTED. Для входящих
+  // (direction = inbound) — префикс кода журнала приёма до двоеточия (auth, body, schema,
+  // content_type, query, queue) либо код delivery для сбоя передачи в очередь.
+  string error_code = 3;
+
+  // HTTP-статус ответа внешней системы для исходящей ошибки; 0 означает, что статуса нет, либо
+  // ошибка входящая.
+  int32 http_status = 4;
+
+  // Исход исходящей операции, например HTTP_RESPONSE, TRANSPORT_ERROR или GATEWAY_REFUSED;
+  // пустая строка для входящих ошибок.
+  string outcome = 5;
+}
+
 // Запрос изменения настроек черновика.
 message UpdateChannelDraftRequest {
   // Имя канала, черновик которого изменяется.
@@ -389,7 +496,9 @@ message RegisterProductRouteRequest {
   // Каналы, доступные продукту для исходящих вызовов. Требуется хотя бы один.
   repeated string allowed_channels = 2;
 
-  // Адреса очередей, допустимые как отправитель запроса и получатель результата. Требуется хотя бы один.
+  // Адреса очередей продукта. Пустой список допустим: сохраняется вычисленный адрес
+  // <product_id>.inbox. Непустой список должен совпадать с вычисленным адресом, иначе регистрация
+  // отклоняется с проблемой address, а существующий маршрут не меняется.
   repeated string allowed_queue_addresses = 3;
 }
 
@@ -407,7 +516,8 @@ message GetProductRouteResponse {
   // Каналы, доступные продукту.
   repeated string allowed_channels = 2;
 
-  // Адреса очередей, допустимые для продукта.
+  // Адрес очереди продукта, вычисленный из product_id: <product_id>.inbox (список из одного
+  // элемента). Сохранённое в маршруте значение источником истины не является и не возвращается.
   repeated string allowed_queue_addresses = 3;
 }
 
@@ -448,7 +558,8 @@ message ListContractOperationsRequest {
   int32 version = 2;
 }
 
-// Операция версии контракта: метод, шаблон пути и идентификатор операции из документа.
+// Операция версии контракта: метод, шаблон пути, идентификатор операции из документа и настройки
+// операции. Настройки — изменяемый слой поверх неизменяемого документа версии (ADR §7.3).
 message ContractOperationInfo {
   // HTTP-метод операции в верхнем регистре: GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD или TRACE.
   string http_method = 1;
@@ -459,6 +570,19 @@ message ContractOperationInfo {
 
   // Идентификатор операции из документа; пустая строка, если operationId не задан.
   string operation_id = 3;
+
+  // Признак обслуживания операции: false — вызовы получают 404 и фиксируются в аудите.
+  bool enabled = 4;
+
+  // Переопределение очереди получателя продукта в формате <product_id>.inbox; пустая строка
+  // означает, что действует очередь версии.
+  string recipient_queue = 5;
+
+  // Переопределение квоты запросов на окно; 0 — действует квота версии или общая квота приложения.
+  int32 rate_limit_permit = 6;
+
+  // Переопределение окна квоты в секундах; 0 — действует окно версии или общее окно приложения.
+  int32 rate_limit_window_seconds = 7;
 }
 
 // Ответ с операциями версии контракта, упорядоченными по методу и шаблону.
@@ -478,7 +602,8 @@ message GetContractVersionRequest {
 
 // Настройки входящих вызовов версии контракта.
 message ContractVersionSettings {
-  // Очередь получателя продуктов; обязательна при публикации версии.
+  // Очередь получателя продуктов в формате <product_id>.inbox; обязательна при публикации версии.
+  // Несоответствие формату отклоняет публикацию с проблемой queue.
   string recipient_queue = 1;
 
   // Тип авторизации входящих вызовов: none, api_key, basic, client_certificate.
@@ -526,6 +651,42 @@ message UpdateContractVersionSettingsRequest {
 
   // Новые настройки: отсутствующие значения сбрасываются в значения по умолчанию.
   ContractVersionSettings settings = 3;
+}
+
+// Запрос изменения настроек одной операции версии контракта.
+//
+// Передаются только изменяемые поля: отсутствующее поле остаётся без изменений, поэтому изменение
+// одной настройки не затрагивает остальные. Настройки задаются для версии, в которой уже извлечены
+// операции (после публикации); для черновика операций нет и запрос возвращает NotFound. Изменение
+// отменённой версии (superseded) отклоняется с проблемой version.
+message UpdateContractOperationSettingsRequest {
+  // Имя канала, которому принадлежит контракт.
+  string channel_name = 1;
+
+  // Номер версии контракта; неизвестная версия — gRPC NotFound (REST 404).
+  int32 version = 2;
+
+  // Операция из документа по operationId; обязательна для адресации настроек. Операции без
+  // operationId в документе управляющим API не адресуются; для черновика, неизвестного
+  // идентификатора и такой операции — gRPC NotFound (REST 404). Пустой path-параметр — проблема
+  // operation_id.
+  string operation_id = 3;
+
+  // Признак обслуживания операции; отсутствие поля — значение не меняется.
+  optional bool enabled = 4;
+
+  // Переопределение очереди получателя продукта в формате <product_id>.inbox; отсутствие поля —
+  // значение не меняется, пустая строка снимает переопределение и возвращает очередь версии,
+  // несоответствие формату отклоняется с проблемой queue.
+  optional string recipient_queue = 5;
+
+  // Переопределение квоты запросов на окно; отсутствие поля — значение не меняется,
+  // неположительное значение отклоняется с проблемой rate_limit.
+  optional int32 rate_limit_permit = 6;
+
+  // Переопределение окна квоты в секундах; отсутствие поля — значение не меняется,
+  // неположительное значение отклоняется с проблемой rate_limit.
+  optional int32 rate_limit_window_seconds = 7;
 }
 
 // Результат операции над версией контракта.

@@ -20,6 +20,7 @@ public sealed class ProcessOutboundRequestHandler(
     ResolveAuthorizationHandler authorizationResolver,
     ExecuteHttpCallHandler httpCaller,
     OutboundOperationRecorder recorder,
+    StoredOutboundResultFactory resultFactory,
     PublishOutboundResultHandler publisher)
 {
     public async Task<ProcessOutboundRequestResult> HandleAsync(
@@ -37,6 +38,23 @@ public sealed class ProcessOutboundRequestHandler(
             return new ProcessOutboundRequestResult(false, problems);
         }
 
+        // Идемпотентность проверяется до правил канала: состояние операции и владение решают,
+        // будет ли выполнен внешний вызов (ADR §8.10).
+        var existing = await recorder.FindAsync(request.MessageId, cancellationToken);
+
+        if (existing is not null &&
+            !string.Equals(existing.ProductId, request.ProductId, StringComparison.Ordinal))
+        {
+            // Чужой продукт не получает сохранённый результат, а состояние операции не меняется.
+            return await RefuseAsync(
+                command,
+                OutboundErrorCodes.ProductNotAllowed,
+                "операция принадлежит другому продукту",
+                allowUnverifiedAddress: false,
+                existing,
+                cancellationToken);
+        }
+
         var identity = await identityResolver.HandleAsync(
             request.ProductId,
             command.SenderAddress,
@@ -45,7 +63,13 @@ public sealed class ProcessOutboundRequestHandler(
 
         if (identity.ErrorCode is not null)
         {
-            return await RefuseAsync(command, identity.ErrorCode, identity.ErrorMessage, allowUnverifiedAddress: true, cancellationToken);
+            return await RefuseAsync(
+                command,
+                identity.ErrorCode,
+                identity.ErrorMessage,
+                allowUnverifiedAddress: true,
+                existing,
+                cancellationToken);
         }
 
         if (string.IsNullOrWhiteSpace(command.ReturnAddress) ||
@@ -56,13 +80,14 @@ public sealed class ProcessOutboundRequestHandler(
                 OutboundErrorCodes.ProductNotAllowed,
                 "адрес доставки результата не разрешён продукту",
                 allowUnverifiedAddress: false,
+                existing,
                 cancellationToken);
         }
 
-        var existing = await recorder.FindAsync(request.MessageId, cancellationToken);
-
         if (existing is not null)
         {
+            // Завершённая операция отдаёт сохранённый результат: канал, метод, путь и авторизация
+            // повторно не проверяются, второй внешний вызов не выполняется.
             return await ReplayAsync(existing, command, cancellationToken);
         }
 
@@ -75,25 +100,47 @@ public sealed class ProcessOutboundRequestHandler(
                 OutboundErrorCodes.ChannelNotActive,
                 $"у канала '{request.ChannelName}' нет активной ревизии",
                 allowUnverifiedAddress: true,
+                existing,
                 cancellationToken);
         }
 
         if (!channel.AllowedMethods.Contains(request.HttpMethod, StringComparer.OrdinalIgnoreCase))
         {
-            return await RefuseAsync(command, OutboundErrorCodes.MethodNotAllowed, "метод не разрешён каналом", true, cancellationToken);
+            return await RefuseAsync(
+                command,
+                OutboundErrorCodes.MethodNotAllowed,
+                "метод не разрешён каналом",
+                allowUnverifiedAddress: true,
+                existing,
+                cancellationToken,
+                channelRevisionNumber: channel.Number);
         }
 
         if (!RelativePathMatcher.IsStructurallyValid(request.RelativePath) ||
             !channel.AllowedPaths.Any(template => RelativePathMatcher.Matches(request.RelativePath, template)))
         {
-            return await RefuseAsync(command, OutboundErrorCodes.PathNotAllowed, "путь не разрешён каналом", true, cancellationToken);
+            return await RefuseAsync(
+                command,
+                OutboundErrorCodes.PathNotAllowed,
+                "путь не разрешён каналом",
+                allowUnverifiedAddress: true,
+                existing,
+                cancellationToken,
+                channelRevisionNumber: channel.Number);
         }
 
         var authorization = authorizationResolver.Handle(channel);
 
         if (authorization.ErrorCode is not null)
         {
-            return await RefuseAsync(command, authorization.ErrorCode, authorization.ErrorMessage, true, cancellationToken);
+            return await RefuseAsync(
+                command,
+                authorization.ErrorCode,
+                authorization.ErrorMessage,
+                allowUnverifiedAddress: true,
+                existing,
+                cancellationToken,
+                channelRevisionNumber: channel.Number);
         }
 
         var operation = await recorder.TryStartAsync(request, command.ReturnAddress, cancellationToken);
@@ -123,12 +170,21 @@ public sealed class ProcessOutboundRequestHandler(
             channel.RetryPolicy,
             channel.PerAttemptTimeoutMs,
             channel.OverallCapMs,
-            AllowRetryForUnsafeMethod(request));
+            AllowRetryForUnsafeMethod(request),
+            channel.AuthType,
+            authorization.ClientCertificate);
 
         var outcome = await httpCaller.HandleAsync(httpRequest, cancellationToken);
 
-        await recorder.CompleteAsync(operation, request, outcome, cancellationToken);
-        await publisher.HandleAsync(BuildResult(request, outcome), command.ReturnAddress, cancellationToken);
+        var log = await recorder.CompleteAsync(
+            operation,
+            request,
+            command.ReturnAddress,
+            channel.Number,
+            outcome,
+            cancellationToken);
+
+        await publisher.HandleAsync(BuildResult(request, outcome), command.ReturnAddress, log, cancellationToken);
 
         return new ProcessOutboundRequestResult(true, []);
     }
@@ -138,24 +194,56 @@ public sealed class ProcessOutboundRequestHandler(
         string errorCode,
         string? errorMessage,
         bool allowUnverifiedAddress,
-        CancellationToken cancellationToken)
+        OutboundOperation? existing,
+        CancellationToken cancellationToken,
+        int? channelRevisionNumber = null)
     {
         var request = command.Request;
         var outcome = OutboundHttpOutcome.Refused(errorCode, errorMessage ?? "запрос отклонён шлюзом");
 
-        var operation = await recorder.FindAsync(request.MessageId, cancellationToken)
-                        ?? await recorder.TryStartAsync(request, command.ReturnAddress, cancellationToken);
+        var operation = existing;
+        OutboundMessageLog? createdLog = null;
 
-        if (operation is not null && operation.Status != OutboundOperationStatus.Completed)
+        if (operation is null)
         {
-            await recorder.CompleteAsync(operation, request, outcome, cancellationToken);
+            // Операции не было: отказ фиксируется в журнале как единственный результат запроса.
+            operation = await recorder.TryStartAsync(request, command.ReturnAddress, cancellationToken);
+
+            if (operation is not null)
+            {
+                createdLog = await recorder.CompleteAsync(
+                    operation,
+                    request,
+                    command.ReturnAddress,
+                    channelRevisionNumber,
+                    outcome,
+                    cancellationToken);
+            }
+            else
+            {
+                // Гонка: операцию создал параллельный запрос — её состояние не меняется.
+                operation = await recorder.FindAsync(request.MessageId, cancellationToken);
+            }
         }
 
+        // Завершённая операция принадлежит первому результату: журнал и статус не меняются, а
+        // сохранённый результат не подменяется свежим отказом.
         var address = command.ReturnAddress;
 
         if (!string.IsNullOrWhiteSpace(address) && (allowUnverifiedAddress || operation is not null))
         {
-            await publisher.HandleAsync(BuildResult(request, outcome), address, cancellationToken);
+            var result = BuildResult(request, outcome);
+
+            if (createdLog is not null)
+            {
+                await publisher.HandleAsync(result, address, createdLog, cancellationToken);
+            }
+            else
+            {
+                // Отказ не создавал записи журнала: чужая или уже завершённая операция остаётся
+                // в своём статусе, иначе сохранённый результат владельца потерялся бы.
+                await publisher.SendAsync(result, address);
+            }
         }
 
         return new ProcessOutboundRequestResult(false, [$"{errorCode}: {errorMessage}"]);
@@ -166,27 +254,30 @@ public sealed class ProcessOutboundRequestHandler(
         ProcessOutboundRequestCommand command,
         CancellationToken cancellationToken)
     {
-        var request = command.Request;
-
-        if (!string.Equals(operation.ProductId, request.ProductId, StringComparison.Ordinal))
+        if (!string.Equals(operation.ProductId, command.Request.ProductId, StringComparison.Ordinal))
         {
+            // Гонка двух продуктов с одним message_id: сохранённый результат не отдаётся.
             return await RefuseAsync(
                 command,
                 OutboundErrorCodes.ProductNotAllowed,
                 "операция принадлежит другому продукту",
                 allowUnverifiedAddress: false,
+                operation,
                 cancellationToken);
         }
 
         if (operation.Status != OutboundOperationStatus.Completed)
         {
+            // Второй вызов не запускается: результат придёт один раз по завершении первой операции.
             return new ProcessOutboundRequestResult(true, ["operation: операция уже выполняется"]);
         }
 
         if (!string.IsNullOrWhiteSpace(command.ReturnAddress))
         {
+            var log = await recorder.FindLogAsync(operation.MessageId, cancellationToken);
+
             await publisher.HandleAsync(
-                BuildStoredResult(operation, request),
+                resultFactory.Create(operation, log),
                 command.ReturnAddress,
                 cancellationToken);
         }
@@ -225,36 +316,6 @@ public sealed class ProcessOutboundRequestHandler(
         if (outcome.ErrorMessage is not null)
         {
             result.ErrorMessage = outcome.ErrorMessage;
-        }
-
-        return result;
-    }
-
-    private static OutboundResult BuildStoredResult(OutboundOperation operation, OutboundRequest request)
-    {
-        var result = new OutboundResult
-        {
-            MessageId = operation.MessageId,
-            ProductId = operation.ProductId,
-            ChannelName = operation.ChannelName,
-            Outcome = operation.Outcome switch
-            {
-                OutcomeNames.HttpResponse => Outcome.HttpResponse,
-                OutcomeNames.TransportError => Outcome.TransportError,
-                _ => Outcome.GatewayRefused,
-            },
-            CorrelationId = request.CorrelationId,
-            AttemptCount = operation.AttemptCount,
-        };
-
-        if (operation.HttpStatusCode is { } status)
-        {
-            result.HttpStatusCode = status;
-        }
-
-        if (operation.ErrorCode is not null)
-        {
-            result.ErrorCode = operation.ErrorCode;
         }
 
         return result;

@@ -1,18 +1,25 @@
 using System.Net.Http.Headers;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
 using LtiIntegrationGateway.Infrastructure.Security;
 
 namespace LtiIntegrationGateway.Features.Outbound;
 
-/// <summary>Результат подстановки авторизации: заголовки, дополнительные query-параметры или код отказа.</summary>
+/// <summary>
+/// Результат подстановки авторизации: заголовки, дополнительные query-параметры, клиентский
+/// сертификат для TLS-рукопожатия или код отказа.
+/// </summary>
 public sealed record AuthorizationResult(
     IReadOnlyDictionary<string, string> Headers,
     IReadOnlyList<(string Name, string Value)> QueryParameters,
     string? ErrorCode,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    X509Certificate2? ClientCertificate = null);
 
-public sealed class ResolveAuthorizationHandler(ISecretStore secretStore)
+public sealed class ResolveAuthorizationHandler(
+    ISecretStore secretStore,
+    IChannelCertificateStore certificateStore)
 {
     public AuthorizationResult Handle(ActiveChannel channel)
     {
@@ -22,16 +29,30 @@ public sealed class ResolveAuthorizationHandler(ISecretStore secretStore)
                 return Empty();
 
             case ChannelAuthType.ClientCertificate:
-                return Failure(
-                    OutboundErrorCodes.AuthTypeUnsupported,
-                    "тип авторизации client_certificate пока не поддерживается");
+            {
+                var loaded = certificateStore.Load(channel.ConfigKey);
+
+                if (loaded.Certificate is null)
+                {
+                    return Failure(
+                        OutboundErrorCodes.SecretNotConfigured,
+                        SecretMissingMessage(channel.ConfigKey, loaded.Error));
+                }
+
+                return new AuthorizationResult(
+                    new Dictionary<string, string>(StringComparer.Ordinal),
+                    [],
+                    null,
+                    null,
+                    loaded.Certificate);
+            }
 
             case ChannelAuthType.Bearer:
             {
                 var token = secretStore.Find(channel.ConfigKey ?? string.Empty);
 
                 return token is null
-                    ? Failure(OutboundErrorCodes.SecretNotConfigured, "значение секрета не настроено")
+                    ? Failure(OutboundErrorCodes.SecretNotConfigured, SecretMissingMessage(channel.ConfigKey))
                     : new AuthorizationResult(
                         new Dictionary<string, string>(StringComparer.Ordinal)
                         {
@@ -48,7 +69,7 @@ public sealed class ResolveAuthorizationHandler(ISecretStore secretStore)
 
                 if (value is null)
                 {
-                    return Failure(OutboundErrorCodes.SecretNotConfigured, "значение секрета не настроено");
+                    return Failure(OutboundErrorCodes.SecretNotConfigured, SecretMissingMessage(channel.ConfigKey));
                 }
 
                 if (string.IsNullOrWhiteSpace(channel.HeaderName))
@@ -73,7 +94,7 @@ public sealed class ResolveAuthorizationHandler(ISecretStore secretStore)
 
                 if (password is null)
                 {
-                    return Failure(OutboundErrorCodes.SecretNotConfigured, "значение секрета не настроено");
+                    return Failure(OutboundErrorCodes.SecretNotConfigured, SecretMissingMessage(channel.ConfigKey));
                 }
 
                 var credentials = Convert.ToBase64String(
@@ -101,4 +122,15 @@ public sealed class ResolveAuthorizationHandler(ISecretStore secretStore)
 
     private static AuthorizationResult Failure(string code, string message) =>
         new(new Dictionary<string, string>(StringComparer.Ordinal), [], code, message);
+
+    /// <summary>
+    /// Диагностика отсутствующего или непригодного секрета в формате ADR §7.5: только имя ключа
+    /// конфигурации и, при необходимости, причина; значение секрета в текст не попадает.
+    /// </summary>
+    private static string SecretMissingMessage(string? configKey, string? reason = null)
+    {
+        var message = $"secret key missing (key: {configKey})";
+
+        return string.IsNullOrWhiteSpace(reason) ? message : $"{message}: {reason}";
+    }
 }

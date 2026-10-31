@@ -7,6 +7,7 @@ namespace LtiIntegrationGateway.Features.Outbound;
 /// <summary>Активная ревизия канала с настройками, нужными для вызова.</summary>
 public sealed record ActiveChannel(
     string ChannelName,
+    int Number,
     string BaseUrl,
     ChannelAuthType AuthType,
     string? ConfigKey,
@@ -39,6 +40,7 @@ public sealed class LoadActiveChannelHandler(GatewayDbContext db)
 
         return new ActiveChannel(
             channelName,
+            revision.Number,
             revision.BaseUrl,
             revision.AuthType,
             revision.ConfigKey,

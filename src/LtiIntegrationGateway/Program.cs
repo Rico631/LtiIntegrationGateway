@@ -6,6 +6,7 @@ using LtiIntegrationGateway.Features.Inbound;
 using LtiIntegrationGateway.Features.Management;
 using LtiIntegrationGateway.Features.Outbound;
 using LtiIntegrationGateway.Features.ProductRoutes;
+using LtiIntegrationGateway.Infrastructure.Http;
 using LtiIntegrationGateway.Infrastructure.Management;
 using LtiIntegrationGateway.Infrastructure.OpenApi;
 using LtiIntegrationGateway.Infrastructure.Persistence;
@@ -45,22 +46,29 @@ builder.Services.AddScoped<PublishChannelRevisionHandler>();
 builder.Services.AddScoped<ActivateChannelRevisionHandler>();
 builder.Services.AddScoped<RollbackChannelRevisionHandler>();
 builder.Services.AddScoped<GetChannelHandler>();
+builder.Services.AddScoped<GetChannelHealthHandler>();
 
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ISecretStore, ConfigurationSecretStore>();
+builder.Services.AddSingleton<IChannelCertificateStore, ConfigurationChannelCertificateStore>();
+builder.Services.AddSingleton<ChannelHttpClientPool>();
+builder.Services.AddSingleton<IChannelHttpClientFactory>(
+    services => services.GetRequiredService<ChannelHttpClientPool>());
 builder.Services.AddScoped<RegisterProductRouteHandler>();
 builder.Services.AddScoped<GetProductRouteHandler>();
 builder.Services.AddScoped<ResolveSenderIdentityHandler>();
 builder.Services.AddScoped<LoadActiveChannelHandler>();
 builder.Services.AddScoped<ResolveAuthorizationHandler>();
 builder.Services.AddScoped<OutboundOperationRecorder>();
+builder.Services.AddSingleton<StoredOutboundResultFactory>();
 builder.Services.AddScoped<PublishOutboundResultHandler>();
 builder.Services.AddScoped<ProcessOutboundRequestHandler>();
 builder.Services.AddScoped<OutboundRequestHandler>();
 builder.Services.AddScoped<IHandleMessages<OutboundRequest>>(services => services.GetRequiredService<OutboundRequestHandler>());
 
-builder.Services
-    .AddHttpClient(ExecuteHttpCallHandler.ClientName)
-    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.Configure<OutboundDeliveryOptions>(
+    builder.Configuration.GetSection(OutboundDeliveryOptions.SectionName));
+builder.Services.AddHostedService<OutboundResultDispatcher>();
 
 builder.Services.AddScoped<ExecuteHttpCallHandler>();
 
@@ -75,6 +83,7 @@ builder.Services.AddSingleton<IInboundMessagePublisher, RebusInboundMessagePubli
 builder.Services.AddSingleton<InboundRequestAuthenticator>();
 builder.Services.AddSingleton<InboundMessageLogWriter>();
 builder.Services.AddSingleton<InboundRequestHandler>();
+builder.Services.AddSingleton<InboundDisabledOperationHandler>();
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -114,6 +123,7 @@ builder.Services.AddScoped<ActivateContractVersionHandler>();
 builder.Services.AddScoped<ListContractOperationsHandler>();
 builder.Services.AddScoped<GetContractVersionHandler>();
 builder.Services.AddScoped<UpdateContractVersionSettingsHandler>();
+builder.Services.AddScoped<UpdateContractOperationSettingsHandler>();
 builder.Services.AddScoped<ManagementApiService>();
 
 builder.Services.Configure<ManagementApiKeyOptions>(

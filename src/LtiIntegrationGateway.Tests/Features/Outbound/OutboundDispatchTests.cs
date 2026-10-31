@@ -79,6 +79,32 @@ public class OutboundDispatchTests
     }
 
     [Test]
+    public async Task Return_address_not_equal_to_computed_inbox_is_refused()
+    {
+        await using var fixture = new OutboundFixture();
+        await fixture.CreateActiveChannelAsync();
+        await fixture.RegisterProductAsync();
+
+        var bus = new RecordingBus();
+
+        using (var db = fixture.CreateDb())
+        {
+            var result = await fixture.CreateProcessor(db, bus).HandleAsync(
+                Command(returnAddress: "another.inbox"));
+
+            await Assert.That(result.Completed).IsFalse();
+            await Assert.That(result.Problems[0].StartsWith(
+                OutboundErrorCodes.ProductNotAllowed, StringComparison.Ordinal)).IsTrue();
+        }
+
+        await Assert.That(fixture.Http.CallCount).IsEqualTo(0);
+        await Assert.That(bus.Sent.Count).IsEqualTo(1);
+        await Assert.That(((OutboundResult)bus.Sent[0].Message).ErrorCode)
+            .IsEqualTo(OutboundErrorCodes.ProductNotAllowed);
+        await Assert.That(((OutboundResult)bus.Sent[0].Message).Outcome).IsEqualTo(Outcome.GatewayRefused);
+    }
+
+    [Test]
     public async Task Channel_not_allowed_for_product_is_refused()
     {
         await using var fixture = new OutboundFixture();
@@ -240,6 +266,8 @@ public class OutboundDispatchTests
         await Assert.That(log.HttpStatusCode).IsEqualTo(201);
         await Assert.That(log.Outcome).IsEqualTo(OutcomeNames.HttpResponse);
         await Assert.That(log.DeliveryStatus).IsEqualTo(OutboundDeliveryStatus.Sent);
+        await Assert.That(log.ChannelRevisionNumber).IsEqualTo(1);
+        await Assert.That(log.CreatedAtUnixMs).IsGreaterThan(0);
 
         var operation = await verifyDb.OutboundOperations.SingleAsync();
 

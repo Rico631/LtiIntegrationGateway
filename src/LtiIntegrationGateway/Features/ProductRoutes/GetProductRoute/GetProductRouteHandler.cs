@@ -1,4 +1,5 @@
 using LtiIntegrationGateway.Infrastructure.Persistence;
+using LtiIntegrationGateway.Infrastructure.Rebus;
 using Microsoft.EntityFrameworkCore;
 
 namespace LtiIntegrationGateway.Features.ProductRoutes;
@@ -13,6 +14,10 @@ public sealed record ProductRouteDetails(
 
 public sealed record GetProductRouteResult(ProductRouteDetails? Route, IReadOnlyList<string> Problems);
 
+/// <summary>
+/// Чтение маршрута продукта: адрес очереди всегда возвращается вычисленным из <c>product_id</c>
+/// (ADR §10.2); сохранённые записи с произвольными адресами не мигрируются и не отдаются.
+/// </summary>
 public sealed class GetProductRouteHandler(GatewayDbContext db)
 {
     public async Task<GetProductRouteResult> HandleAsync(
@@ -24,7 +29,6 @@ public sealed class GetProductRouteHandler(GatewayDbContext db)
         var route = await db.ProductRoutes
             .AsNoTracking()
             .Include(entity => entity.AllowedChannels)
-            .Include(entity => entity.AllowedQueueAddresses)
             .SingleOrDefaultAsync(entity => entity.ProductId == query.ProductId, cancellationToken);
 
         if (route is null)
@@ -35,7 +39,7 @@ public sealed class GetProductRouteHandler(GatewayDbContext db)
         var details = new ProductRouteDetails(
             route.ProductId,
             route.AllowedChannels.Select(entity => entity.ChannelName).ToArray(),
-            route.AllowedQueueAddresses.Select(entity => entity.Address).ToArray());
+            [QueueNames.ProductInbox(route.ProductId)]);
 
         return new GetProductRouteResult(details, []);
     }

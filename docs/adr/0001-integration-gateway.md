@@ -1006,7 +1006,8 @@ Content-Type: application/json
 
 - настройки приёма хранятся в версии контракта: очередь получателя, тип авторизации с ключом
   конфигурации и несекретными параметрами (`header_name`, `user_name`), квота частоты
-  (`rate_limit_permit`, `rate_limit_window_seconds`); конкретная настройка операции, флаг `enabled`,
+  (`rate_limit_permit`, `rate_limit_window_seconds`); настройки отдельной операции (`enabled`,
+  переопределение очереди и квоты) реализованы изменением `2026-10-31-inbound-operation-settings`;
   HMAC и дедупликация не реализованы;
 - типы авторизации — `none`, `api_key`, `basic`, `client_certificate`; секреты берутся из
   конфигурации по ключу, сравниваются за постоянное время и не попадают ни в журнал, ни в логи;
@@ -1346,16 +1347,19 @@ OpenAPI JSON считается недоверенным входным доку
 | `ListContractOperations` | `GET /v1/channels/{channel_name}/contracts/{version}/operations` | Операции версии контракта |
 | `GetContractVersion` | `GET /v1/channels/{channel_name}/contracts/{version}` | Версия контракта с настройками приёма и операциями |
 | `UpdateContractVersionSettings` | `PATCH /v1/channels/{channel_name}/contracts/{version}/settings` | Настройки приёма черновика: очередь, авторизация, квота |
+| `UpdateContractOperationSettings` | `PATCH /v1/channels/{channel_name}/contracts/{version}/operations/{operation_id}` | Настройки операции: `enabled`, очередь получателя, квота |
 | `GetOutboundOperation` | `GET /v1/operations/{message_id}` | Статус исходящей операции |
+| `GetChannelHealth` | `GET /v1/channels/{channel_name}/health` | Состояние канала: секрет, срок сертификата, последние ошибки |
 
 Отличия от логического перечня выше: контракты адресуются по каналу
 (`/v1/channels/{channel_name}/contracts`), маршруты продуктов добавлены как отдельный ресурс,
 настройки приёма задаются на версии контракта
 (`PATCH .../contracts/{version}/settings`), а настройки отдельной операции
-(`PATCH .../operations/{operationId}`) и состояние канала (`GET /v1/channels/{name}/health`)
-остаются отложенными. `UpdateContractVersionSettings` допускается только для черновика:
-опубликованная версия неизменяема, отказ возвращается с кодом `version`. Публикация версии без
-очереди получателя отклоняется с кодом `queue`.
+(`PATCH .../operations/{operationId}`) реализованы изменением
+`2026-10-31-inbound-operation-settings`; состояние канала (`GET /v1/channels/{name}/health`)
+реализовано изменением `2026-10-31-channel-health`. `UpdateContractVersionSettings` допускается
+только для черновика: опубликованная версия неизменяема, отказ возвращается с кодом `version`.
+Публикация версии без очереди получателя отклоняется с кодом `queue`.
 
 **Особенность хостинга gRPC.** Сервисы gRPC публикуются по платформенному шаблону
 `/{service}/{method}`. Если шаблон входящего маршрута состоит из двух сегментов, запрос с

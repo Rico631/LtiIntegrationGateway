@@ -7,7 +7,15 @@ namespace LtiIntegrationGateway.Features.Contracts;
 /// <summary>Чтение операций версии контракта.</summary>
 public sealed record ListContractOperationsQuery(string ChannelName, int Version);
 
-public sealed record ContractOperationDetails(string HttpMethod, string Template, string? OperationId);
+/// <summary>Операция версии контракта вместе с её настройками.</summary>
+public sealed record ContractOperationDetails(
+    string HttpMethod,
+    string Template,
+    string? OperationId,
+    bool Enabled,
+    string? RecipientQueue,
+    int? RateLimitPermit,
+    int? RateLimitWindowSeconds);
 
 public sealed record ListContractOperationsResult(
     IReadOnlyList<ContractOperationDetails> Operations,
@@ -38,7 +46,11 @@ public sealed class ListContractOperationsHandler(GatewayDbContext db)
             .Select(operation => new ContractOperationDetails(
                 operation.HttpMethod,
                 operation.Template,
-                operation.OperationId))
+                operation.OperationId,
+                operation.Enabled,
+                operation.RecipientQueue,
+                operation.RateLimitPermit,
+                operation.RateLimitWindowSeconds))
             .ToArray();
 
         return new ListContractOperationsResult(operations, []);

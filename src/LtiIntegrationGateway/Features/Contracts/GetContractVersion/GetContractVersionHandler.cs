@@ -50,7 +50,11 @@ public sealed class GetContractVersionHandler(GatewayDbContext db)
                 .Select(operation => new ContractOperationDetails(
                     operation.HttpMethod,
                     operation.Template,
-                    operation.OperationId))
+                    operation.OperationId,
+                    operation.Enabled,
+                    operation.RecipientQueue,
+                    operation.RateLimitPermit,
+                    operation.RateLimitWindowSeconds))
                 .ToArray());
 
         return new GetContractVersionResult(details, []);

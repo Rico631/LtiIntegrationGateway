@@ -186,12 +186,27 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("ContractVersionId")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("Enabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("HttpMethod")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("OperationId")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("RateLimitPermit")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("RateLimitWindowSeconds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RecipientQueue")
                         .HasMaxLength(256)
                         .HasColumnType("TEXT");
 
@@ -331,6 +346,9 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("ReceivedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<long>("ReceivedAtUnixMs")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("RelativePath")
                         .IsRequired()
                         .HasMaxLength(2048)
@@ -349,6 +367,8 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                     b.HasIndex("MessageId");
 
                     b.HasIndex("ChannelName", "ReceivedAt");
+
+                    b.HasIndex("ChannelName", "ReceivedAtUnixMs");
 
                     b.ToTable("InboundMessageLogs");
                 });
@@ -402,11 +422,22 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("ChannelRevisionNumber")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("ContentType")
                         .HasMaxLength(256)
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAtUnixMs")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("DeliveryAddress")
+                        .IsRequired()
+                        .HasMaxLength(256)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("DeliveryStatus")
@@ -416,6 +447,10 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("ErrorCode")
                         .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(2048)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("HttpMethod")
@@ -455,6 +490,10 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ChannelName", "CreatedAtUnixMs");
+
+                    b.HasIndex("DeliveryStatus", "CreatedAtUnixMs");
+
                     b.HasIndex("MessageId", "DeliveryStatus");
 
                     b.ToTable("OutboundMessageLogs");
@@ -475,6 +514,10 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CorrelationId")
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset>("CreatedAt")

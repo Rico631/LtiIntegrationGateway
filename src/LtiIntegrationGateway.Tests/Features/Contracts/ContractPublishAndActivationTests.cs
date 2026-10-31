@@ -38,7 +38,7 @@ public class ContractPublishAndActivationTests
         ManagementService.ManagementServiceClient client,
         string channelName,
         int version = 1,
-        string queue = "product.inbound")
+        string queue = "dpv.inbox")
     {
         var update = await client.UpdateContractVersionSettingsAsync(
             new UpdateContractVersionSettingsRequest

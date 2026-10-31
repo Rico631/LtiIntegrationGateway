@@ -171,6 +171,7 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
             operation.Property(entity => entity.Status).HasConversion<string>().HasMaxLength(32);
             operation.Property(entity => entity.Outcome).HasMaxLength(32);
             operation.Property(entity => entity.ErrorCode).HasMaxLength(64);
+            operation.Property(entity => entity.CorrelationId).HasMaxLength(128);
             operation.Property(entity => entity.ReturnAddress).HasMaxLength(256);
         });
 
@@ -185,8 +186,16 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
             log.Property(entity => entity.ContentType).HasMaxLength(256);
             log.Property(entity => entity.Outcome).HasMaxLength(32);
             log.Property(entity => entity.ErrorCode).HasMaxLength(64);
+            log.Property(entity => entity.ErrorMessage).HasMaxLength(2048);
+            log.Property(entity => entity.DeliveryAddress).HasMaxLength(256).IsRequired();
             log.Property(entity => entity.DeliveryStatus).HasConversion<string>().HasMaxLength(16);
             log.HasIndex(entity => new { entity.MessageId, entity.DeliveryStatus });
+            // Индекс для диспетчера: выборка недоставленных записей в порядке создания без
+            // полного сканирования (SQLite не умеет ORDER BY по DateTimeOffset).
+            log.HasIndex(entity => new { entity.DeliveryStatus, entity.CreatedAtUnixMs });
+            // Индекс для выборки последних ошибок канала: здоровье канала читает журнал по каналу
+            // в порядке времени (SQLite не умеет ORDER BY по DateTimeOffset).
+            log.HasIndex(entity => new { entity.ChannelName, entity.CreatedAtUnixMs });
         });
 
         modelBuilder.Entity<ContractVersion>(version =>
@@ -216,6 +225,8 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
             operation.Property(entity => entity.HttpMethod).HasMaxLength(16).IsRequired();
             operation.Property(entity => entity.Template).HasMaxLength(2048).IsRequired();
             operation.Property(entity => entity.OperationId).HasMaxLength(256);
+            operation.Property(entity => entity.Enabled).HasDefaultValue(true).HasSentinel(true);
+            operation.Property(entity => entity.RecipientQueue).HasMaxLength(256);
             operation.HasIndex(entity => new { entity.ContractVersionId, entity.HttpMethod, entity.Template }).IsUnique();
         });
 
@@ -244,6 +255,9 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
             log.Property(entity => entity.ErrorCode).HasMaxLength(64);
             log.HasIndex(entity => entity.MessageId);
             log.HasIndex(entity => new { entity.ChannelName, entity.ReceivedAt });
+            // Индекс для выборки последних ошибок канала: SQLite не умеет ORDER BY по DateTimeOffset,
+            // поэтому порядок задаётся колонкой Unix-миллисекунд.
+            log.HasIndex(entity => new { entity.ChannelName, entity.ReceivedAtUnixMs });
         });
     }
 

@@ -1,4 +1,6 @@
 using System.Net;
+using LtiIntegrationGateway.Features.Contracts;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
 using LtiIntegrationGateway.Infrastructure.Routing;
 using LtiIntegrationGateway.Tests.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
@@ -7,7 +9,7 @@ namespace LtiIntegrationGateway.Tests.Features.Inbound;
 
 public class InboundRateLimitTests
 {
-    private const string RecipientQueue = "product.inbound";
+    private const string RecipientQueue = "dpv.inbox";
 
     private static readonly Dictionary<string, string?> TwoRequestWindow = new()
     {
@@ -125,5 +127,108 @@ public class InboundRateLimitTests
             .IsEqualTo(HttpStatusCode.Accepted);
         await Assert.That((await client.GetAsync("/callbacks/defaults")).StatusCode)
             .IsEqualTo(HttpStatusCode.Accepted);
+    }
+
+    [Test]
+    public async Task Operation_quota_overrides_version_quota()
+    {
+        using var factory = GatewayWebApplicationFactory.WithStorage();
+
+        using var client = factory.CreateClient();
+
+        var versionSettings = new ContractVersionSettings(
+            "dpv.inbox",
+            ChannelAuthType.None,
+            null,
+            null,
+            null,
+            RateLimitPermit: 100,
+            RateLimitWindowSeconds: 60);
+
+        var operations = new[]
+        {
+            new ContractOperation
+            {
+                Id = Guid.NewGuid(),
+                ContractVersionId = Guid.Empty,
+                HttpMethod = "GET",
+                Template = "/callbacks/limited",
+                OperationId = "limited",
+                RateLimitPermit = 1,
+                RateLimitWindowSeconds = 60,
+            },
+            new ContractOperation
+            {
+                Id = Guid.NewGuid(),
+                ContractVersionId = Guid.Empty,
+                HttpMethod = "GET",
+                Template = "/callbacks/open",
+                OperationId = "open",
+            },
+        };
+
+        var set = ContractRouteSets.Build(
+            Guid.NewGuid(),
+            "bank-a",
+            operations,
+            versionSettings,
+            new InboundRateLimitOptions { PermitLimit = 100, WindowSeconds = 60 });
+
+        CatalogOf(factory).Activate(set);
+
+        await Assert.That((await client.GetAsync("/callbacks/limited")).StatusCode)
+            .IsEqualTo(HttpStatusCode.Accepted);
+        await Assert.That((await client.GetAsync("/callbacks/limited")).StatusCode)
+            .IsEqualTo(HttpStatusCode.TooManyRequests);
+
+        // Маршрут без переопределения использует квоту версии, а не квоту соседней операции.
+        await Assert.That((await client.GetAsync("/callbacks/open")).StatusCode)
+            .IsEqualTo(HttpStatusCode.Accepted);
+    }
+
+    [Test]
+    public async Task Route_metadata_carries_effective_operation_settings()
+    {
+        using var factory = GatewayWebApplicationFactory.WithStorage();
+
+        var versionSettings = new ContractVersionSettings(
+            "dpv.inbox",
+            ChannelAuthType.ApiKey,
+            "bank-a.inbound",
+            "X-Bank-Key",
+            null,
+            RateLimitPermit: 100,
+            RateLimitWindowSeconds: 60);
+
+        var set = ContractRouteSets.Build(
+            Guid.NewGuid(),
+            "bank-a",
+            [
+                new ContractOperation
+                {
+                    Id = Guid.NewGuid(),
+                    ContractVersionId = Guid.Empty,
+                    HttpMethod = "GET",
+                    Template = "/callbacks/operation",
+                    OperationId = "operation",
+                    RecipientQueue = "other.inbox",
+                    RateLimitPermit = 5,
+                    RateLimitWindowSeconds = 20,
+                },
+            ],
+            versionSettings,
+            new InboundRateLimitOptions { PermitLimit = 1, WindowSeconds = 1 });
+
+        CatalogOf(factory).Activate(set);
+
+        var endpoint = factory.Services.GetRequiredService<InboundEndpointDataSource>().Endpoints.Single();
+        var metadata = endpoint.Metadata.GetMetadata<InboundRouteMetadata>();
+
+        await Assert.That(metadata).IsNotNull();
+        await Assert.That(metadata!.ChannelName).IsEqualTo("bank-a");
+        await Assert.That(metadata.RecipientQueue).IsEqualTo("other.inbox");
+        await Assert.That(metadata.RateLimitPermit).IsEqualTo(5);
+        await Assert.That(metadata.RateLimitWindowSeconds).IsEqualTo(20);
+        await Assert.That(metadata.AuthType).IsEqualTo(ChannelAuthType.ApiKey);
     }
 }

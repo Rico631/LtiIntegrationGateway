@@ -23,6 +23,7 @@ public sealed partial class ManagementApiService : ManagementService.ManagementS
     private readonly ActivateChannelRevisionHandler _activateChannelRevision;
     private readonly RollbackChannelRevisionHandler _rollbackChannelRevision;
     private readonly GetChannelHandler _getChannel;
+    private readonly GetChannelHealthHandler _getChannelHealth;
     private readonly RegisterProductRouteHandler _registerProductRoute;
     private readonly GetProductRouteHandler _getProductRoute;
     private readonly UploadContractVersionHandler _uploadContractVersion;
@@ -31,6 +32,7 @@ public sealed partial class ManagementApiService : ManagementService.ManagementS
     private readonly ListContractOperationsHandler _listContractOperations;
     private readonly GetContractVersionHandler _getContractVersion;
     private readonly UpdateContractVersionSettingsHandler _updateContractVersionSettings;
+    private readonly UpdateContractOperationSettingsHandler _updateContractOperationSettings;
     private readonly ManagementAuditWriter _audit;
 
     public ManagementApiService(
@@ -41,6 +43,7 @@ public sealed partial class ManagementApiService : ManagementService.ManagementS
         ActivateChannelRevisionHandler activateChannelRevision,
         RollbackChannelRevisionHandler rollbackChannelRevision,
         GetChannelHandler getChannel,
+        GetChannelHealthHandler getChannelHealth,
         RegisterProductRouteHandler registerProductRoute,
         GetProductRouteHandler getProductRoute,
         UploadContractVersionHandler uploadContractVersion,
@@ -49,6 +52,7 @@ public sealed partial class ManagementApiService : ManagementService.ManagementS
         ListContractOperationsHandler listContractOperations,
         GetContractVersionHandler getContractVersion,
         UpdateContractVersionSettingsHandler updateContractVersionSettings,
+        UpdateContractOperationSettingsHandler updateContractOperationSettings,
         ManagementAuditWriter audit)
     {
         _db = db;
@@ -58,6 +62,7 @@ public sealed partial class ManagementApiService : ManagementService.ManagementS
         _activateChannelRevision = activateChannelRevision;
         _rollbackChannelRevision = rollbackChannelRevision;
         _getChannel = getChannel;
+        _getChannelHealth = getChannelHealth;
         _registerProductRoute = registerProductRoute;
         _getProductRoute = getProductRoute;
         _uploadContractVersion = uploadContractVersion;
@@ -66,6 +71,7 @@ public sealed partial class ManagementApiService : ManagementService.ManagementS
         _listContractOperations = listContractOperations;
         _getContractVersion = getContractVersion;
         _updateContractVersionSettings = updateContractVersionSettings;
+        _updateContractOperationSettings = updateContractOperationSettings;
         _audit = audit;
     }
 

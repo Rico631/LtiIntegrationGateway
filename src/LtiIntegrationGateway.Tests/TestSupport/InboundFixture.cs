@@ -85,7 +85,7 @@ public sealed class FailingInboundMessagePublisher : IInboundMessagePublisher
 public sealed class InboundFixture : IAsyncDisposable
 {
     public const string ChannelName = "bank-a";
-    public const string RecipientQueue = "product.inbound";
+    public const string RecipientQueue = "dpv.inbox";
 
     public static readonly Guid ContractVersionId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 

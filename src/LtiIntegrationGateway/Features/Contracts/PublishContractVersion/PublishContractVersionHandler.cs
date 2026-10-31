@@ -2,12 +2,17 @@ using LtiIntegrationGateway.Infrastructure.Management;
 using LtiIntegrationGateway.Infrastructure.OpenApi;
 using LtiIntegrationGateway.Infrastructure.Persistence;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Rebus;
 using LtiIntegrationGateway.Infrastructure.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace LtiIntegrationGateway.Features.Contracts;
 
-/// <summary>Публикация версии контракта: извлечение операций и проверки конфликтов.</summary>
+/// <summary>
+/// Публикация версии контракта: извлечение операций, перенос настроек из предыдущей версии канала
+/// и проверки конфликтов (ADR §7.3).
+/// </summary>
 public sealed record PublishContractVersionCommand(string ChannelName, int Version);
 
 public sealed record PublishContractVersionResult(int? Version, IReadOnlyList<string> Problems);
@@ -16,7 +21,8 @@ public sealed class PublishContractVersionHandler(
     GatewayDbContext db,
     IOpenApiDocumentReader reader,
     InboundRouteSetValidator routeValidator,
-    ManagementAuditWriter audit)
+    ManagementAuditWriter audit,
+    IOptions<InboundRateLimitOptions> rateLimitOptions)
 {
     public async Task<PublishContractVersionResult> HandleAsync(
         PublishContractVersionCommand command,
@@ -47,6 +53,8 @@ public sealed class PublishContractVersionHandler(
             return new PublishContractVersionResult(version.Version, ["version: опубликованная версия неизменяема"]);
         }
 
+        // Очередь получателя в настройках версии обязательна всегда, даже если все операции отключены
+        // (ADR §15.2); переопределение операции её не заменяет.
         if (string.IsNullOrWhiteSpace(version.RecipientQueue))
         {
             await audit.RecordAsync("PublishContract", target, false, "queue: очередь получателя обязательна", cancellationToken);
@@ -54,11 +62,33 @@ public sealed class PublishContractVersionHandler(
             return new PublishContractVersionResult(version.Version, ["queue: очередь получателя обязательна"]);
         }
 
+        // Имя очереди получателя — вычисляемое имя продукта <product_id>.inbox (ADR §10.2). Проверка
+        // выполняется до чтения документа: несоответствие формату отклоняет публикацию, операции
+        // не создаются.
+        if (!QueueNames.IsProductInbox(version.RecipientQueue))
+        {
+            var problem = "queue: очередь получателя должна иметь формат <product_id>.inbox";
+
+            await audit.RecordAsync("PublishContract", target, false, problem, cancellationToken);
+
+            return new PublishContractVersionResult(version.Version, [problem]);
+        }
+
         var read = await reader.ReadAsync(version.Document, cancellationToken);
         var problems = read.Problems.ToList();
+        IReadOnlyList<ContractOperation> planned = [];
 
         if (read.Succeeded)
         {
+            var settings = ContractVersionSettings.From(version);
+            var previousOperations = await LoadPreviousOperationsAsync(version, cancellationToken);
+
+            planned = PlanOperations(version.Id, read, previousOperations);
+
+            // Дополнительно проверяется действующая очередь каждой включённой операции: при заданной
+            // очереди версии ошибка возможна только при некорректных переопределениях операции.
+            // Версия, в которой все операции отключены, публикуется при заданной очереди версии.
+            problems.AddRange(FindQueueProblems(planned, settings));
             problems.AddRange(FindDuplicateOperationIds(read.Operations));
 
             var activeSets = await LoadOtherActiveSetsAsync(version, cancellationToken);
@@ -76,18 +106,9 @@ public sealed class PublishContractVersionHandler(
 
         db.ContractOperations.RemoveRange(version.Operations);
 
-        foreach (var operation in read.Operations)
+        foreach (var operation in planned)
         {
-            db.ContractOperations.Add(new ContractOperation
-            {
-                Id = Guid.NewGuid(),
-                ContractVersionId = version.Id,
-                HttpMethod = operation.HttpMethod,
-                Template = operation.Template,
-                OperationId = operation.OperationId,
-                RequestSchemas = read.RequestSchemas.GetValueOrDefault(
-                    $"{operation.HttpMethod} {operation.Template}"),
-            });
+            db.ContractOperations.Add(operation);
         }
 
         version.Status = ContractVersionStatus.Published;
@@ -99,6 +120,101 @@ public sealed class PublishContractVersionHandler(
 
         return new PublishContractVersionResult(version.Version, []);
     }
+
+    /// <summary>
+    /// Операции предыдущей версии канала: максимальный номер меньше текущего, кроме черновиков.
+    /// Настройки совпавшей операции переносятся; для новой операции действуют значения по умолчанию.
+    /// </summary>
+    private async Task<IReadOnlyList<ContractOperation>> LoadPreviousOperationsAsync(
+        ContractVersion version,
+        CancellationToken cancellationToken)
+    {
+        var previous = await db.ContractVersions
+            .AsNoTracking()
+            .Include(entity => entity.Operations)
+            .Where(entity =>
+                entity.ChannelId == version.ChannelId &&
+                entity.Version < version.Version &&
+                entity.Status != ContractVersionStatus.Draft)
+            .OrderByDescending(entity => entity.Version)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return previous?.Operations ?? [];
+    }
+
+    private static IReadOnlyList<ContractOperation> PlanOperations(
+        Guid contractVersionId,
+        OpenApiReadResult read,
+        IReadOnlyList<ContractOperation> previous)
+    {
+        var planned = new List<ContractOperation>(read.Operations.Count);
+
+        foreach (var operation in read.Operations)
+        {
+            var source = FindPreviousOperation(previous, operation);
+
+            planned.Add(new ContractOperation
+            {
+                Id = Guid.NewGuid(),
+                ContractVersionId = contractVersionId,
+                HttpMethod = operation.HttpMethod,
+                Template = operation.Template,
+                OperationId = operation.OperationId,
+                RequestSchemas = read.RequestSchemas.GetValueOrDefault(
+                    $"{operation.HttpMethod} {operation.Template}"),
+                Enabled = source?.Enabled ?? true,
+                RecipientQueue = source?.RecipientQueue,
+                RateLimitPermit = source?.RateLimitPermit,
+                RateLimitWindowSeconds = source?.RateLimitWindowSeconds,
+            });
+        }
+
+        return planned;
+    }
+
+    /// <summary>
+    /// Совпадение операций для переноса настроек: маршрут (метод + шаблон) обязан совпадать.
+    /// Если <c>operationId</c> задан у обеих операций, он должен совпадать; fallback по паре
+    /// «метод + шаблон» применяется, только если <c>operationId</c> отсутствует хотя бы у одной из
+    /// них. Изменённый <c>operationId</c> при том же маршруте означает новую операцию — настройки
+    /// не переносятся (spec `contract-registry`).
+    /// </summary>
+    private static ContractOperation? FindPreviousOperation(
+        IReadOnlyList<ContractOperation> previous,
+        OpenApiOperationDefinition operation)
+    {
+        var candidate = previous.FirstOrDefault(previousOperation => SameRoute(previousOperation, operation));
+
+        if (candidate is null)
+        {
+            return null;
+        }
+
+        var operationHasId = !string.IsNullOrWhiteSpace(operation.OperationId);
+        var candidateHasId = !string.IsNullOrWhiteSpace(candidate.OperationId);
+
+        if (operationHasId && candidateHasId)
+        {
+            return string.Equals(candidate.OperationId, operation.OperationId, StringComparison.Ordinal)
+                ? candidate
+                : null;
+        }
+
+        return candidate;
+    }
+
+    private static bool SameRoute(ContractOperation candidate, OpenApiOperationDefinition operation) =>
+        string.Equals(candidate.HttpMethod.Trim(), operation.HttpMethod.Trim(), StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(candidate.Template.Trim(), operation.Template.Trim(), StringComparison.Ordinal);
+
+    private static IEnumerable<string> FindQueueProblems(
+        IEnumerable<ContractOperation> operations,
+        ContractVersionSettings settings) =>
+        operations
+            .Where(operation => operation.Enabled)
+            .Where(operation => ContractOperationSettings.ResolveRecipientQueue(operation, settings) is null)
+            .Select(operation =>
+                $"queue: для операции '{operation.HttpMethod} {operation.Template}' не задана очередь получателя");
 
     private async Task<IReadOnlyList<InboundRouteSet>> LoadOtherActiveSetsAsync(
         ContractVersion version,
@@ -116,7 +232,8 @@ public sealed class PublishContractVersionHandler(
                 active.Id,
                 active.Channel!.Name,
                 active.Operations,
-                ContractVersionSettings.From(active)))
+                ContractVersionSettings.From(active),
+                rateLimitOptions.Value))
             .ToArray();
     }
 

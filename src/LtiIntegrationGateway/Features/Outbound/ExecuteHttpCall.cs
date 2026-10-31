@@ -1,4 +1,6 @@
+using System.Security.Cryptography.X509Certificates;
 using LtiIntegrationGateway.Contracts.Messages.V1;
+using LtiIntegrationGateway.Infrastructure.Http;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
 
 namespace LtiIntegrationGateway.Features.Outbound;
@@ -15,7 +17,9 @@ public sealed record OutboundHttpRequest(
     RetryPolicy RetryPolicy,
     int PerAttemptTimeoutMs,
     int OverallCapMs,
-    bool AllowRetryForUnsafeMethod);
+    bool AllowRetryForUnsafeMethod,
+    ChannelAuthType AuthType,
+    X509Certificate2? ClientCertificate);
 
 /// <summary>Фактический исход вызова: HTTP-ответ, транспортная ошибка или отказ шлюза.</summary>
 public sealed record OutboundHttpOutcome(
@@ -37,16 +41,18 @@ public sealed record OutboundHttpOutcome(
         new(Outcome.GatewayRefused, null, [], null, errorCode, message, 0);
 }
 
-/// <summary>Выполнение HTTP-вызова с повторами по политике канала.</summary>
-public sealed class ExecuteHttpCallHandler(IHttpClientFactory httpClientFactory)
+/// <summary>Выполнение HTTP-вызова через обработчик пула с повторами по политике канала.</summary>
+public sealed class ExecuteHttpCallHandler(IChannelHttpClientFactory httpClientFactory)
 {
-    public const string ClientName = "gateway-outbound";
-
     public async Task<OutboundHttpOutcome> HandleAsync(
         OutboundHttpRequest request,
         CancellationToken cancellationToken = default)
     {
-        var client = httpClientFactory.CreateClient(ClientName);
+        var key = ChannelHttpClientKey.From(request.BaseUrl, request.AuthType, request.ClientCertificate);
+
+        using var lease = httpClientFactory.Acquire(key, request.ClientCertificate);
+        using var client = new HttpClient(lease.Handler, disposeHandler: false);
+
         var uri = BuildUri(request);
         var startedAt = DateTimeOffset.UtcNow;
         var attempts = 0;

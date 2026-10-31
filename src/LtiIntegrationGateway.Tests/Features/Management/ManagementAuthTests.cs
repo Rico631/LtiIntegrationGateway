@@ -95,4 +95,27 @@ public class ManagementAuthTests
         await Assert.That(entries.Any(entry =>
             (entry.Details ?? string.Empty).Contains(ManagementApi.ApiKey, StringComparison.Ordinal))).IsFalse();
     }
+
+    [Test]
+    public async Task Channel_health_without_key_is_rejected()
+    {
+        using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
+        using var client = ManagementApi.CreateClient(factory, apiKey: null);
+
+        var response = await client.GetAsync("/v1/channels/bank-a/health");
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.Unauthorized);
+        await Assert.That(await response.Content.ReadAsStringAsync()).IsEmpty();
+    }
+
+    [Test]
+    public async Task Channel_health_without_configured_key_is_unavailable()
+    {
+        using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings(apiKey: null));
+        using var client = ManagementApi.CreateClient(factory);
+
+        var response = await client.GetAsync("/v1/channels/bank-a/health");
+
+        await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.ServiceUnavailable);
+    }
 }

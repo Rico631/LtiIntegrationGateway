@@ -1,11 +1,12 @@
 using System.Text.RegularExpressions;
 using LtiIntegrationGateway.Infrastructure.Persistence;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
+using LtiIntegrationGateway.Infrastructure.Rebus;
 using Microsoft.EntityFrameworkCore;
 
 namespace LtiIntegrationGateway.Features.ProductRoutes;
 
-/// <summary>Создание или обновление маршрута продукта: разрешённые каналы и адреса очередей.</summary>
+/// <summary>Создание или обновление маршрута продукта: разрешённые каналы и адрес очереди продукта.</summary>
 public sealed record RegisterProductRouteCommand(
     string ProductId,
     IReadOnlyList<string> AllowedChannels,
@@ -13,6 +14,12 @@ public sealed record RegisterProductRouteCommand(
 
 public sealed record RegisterProductRouteResult(IReadOnlyList<string> Problems);
 
+/// <summary>
+/// Регистрация маршрута продукта: адрес очереди вычисляется из <c>product_id</c> как
+/// <c>&lt;product_id&gt;.inbox</c> (ADR §10.2). Пустой список адресов означает вычисленный адрес,
+/// совпадающий адрес принимается идемпотентно, несовпадающий — проблема <c>address</c> без изменения
+/// маршрута.
+/// </summary>
 public sealed partial class RegisterProductRouteHandler(GatewayDbContext db)
 {
     [GeneratedRegex("^[a-z][a-z0-9-]{1,31}$", RegexOptions.CultureInvariant)]
@@ -26,7 +33,10 @@ public sealed partial class RegisterProductRouteHandler(GatewayDbContext db)
 
         var problems = new List<string>();
 
-        if (string.IsNullOrWhiteSpace(command.ProductId) || !ProductIdPattern().IsMatch(command.ProductId))
+        var productIdValid = !string.IsNullOrWhiteSpace(command.ProductId) &&
+            ProductIdPattern().IsMatch(command.ProductId);
+
+        if (!productIdValid)
         {
             problems.Add("product_id: ожидается формат ^[a-z][a-z0-9-]{1,31}$");
         }
@@ -36,15 +46,26 @@ public sealed partial class RegisterProductRouteHandler(GatewayDbContext db)
             problems.Add("allowed_channels: должен быть указан хотя бы один канал");
         }
 
-        if (command.AllowedQueueAddresses.Count == 0)
+        if (productIdValid)
         {
-            problems.Add("allowed_queue_addresses: должен быть указан хотя бы один адрес");
+            var expectedAddress = QueueNames.ProductInbox(command.ProductId);
+
+            // Список остаётся в контракте для совместимости, но единственный допустимый адрес —
+            // вычисленный: произвольные значения отклоняются, чтобы конфигурация не расходилась
+            // с именем очереди (ADR §10.2).
+            if (command.AllowedQueueAddresses.Any(
+                address => !string.Equals(address, expectedAddress, StringComparison.Ordinal)))
+            {
+                problems.Add($"address: адрес очереди продукта должен совпадать с вычисленным '{expectedAddress}'");
+            }
         }
 
         if (problems.Count > 0)
         {
             return new RegisterProductRouteResult(problems);
         }
+
+        var address = QueueNames.ProductInbox(command.ProductId);
 
         var route = await db.ProductRoutes
             .Include(entity => entity.AllowedChannels)
@@ -71,13 +92,13 @@ public sealed partial class RegisterProductRouteHandler(GatewayDbContext db)
             route.AllowedChannels.Add(new ProductRouteChannel { Id = Guid.NewGuid(), ChannelName = channel });
         }
 
-        foreach (var address in command.AllowedQueueAddresses.Distinct(StringComparer.Ordinal))
-        {
-            route.AllowedQueueAddresses.Add(new ProductRouteQueueAddress { Id = Guid.NewGuid(), Address = address });
-        }
+        // Существующие записи с произвольными адресами не мигрируются, но повторная регистрация
+        // приводит маршрут к вычисленному адресу.
+        route.AllowedQueueAddresses.Add(new ProductRouteQueueAddress { Id = Guid.NewGuid(), Address = address });
 
         await db.SaveChangesAsync(cancellationToken);
 
         return new RegisterProductRouteResult([]);
     }
 }
+

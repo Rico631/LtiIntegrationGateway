@@ -18,7 +18,8 @@ public sealed record InboundRouteDefinition(
     string? HeaderName = null,
     string? UserName = null,
     int? RateLimitPermit = null,
-    int? RateLimitWindowSeconds = null);
+    int? RateLimitWindowSeconds = null,
+    bool Enabled = true);
 
 /// <summary>Набор маршрутов одной ревизии контракта; активируется и деактивируется целиком.</summary>
 public sealed record InboundRouteSet(string RevisionKey, IReadOnlyList<InboundRouteDefinition> Routes);

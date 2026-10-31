@@ -1,5 +1,7 @@
+using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
 using LtiIntegrationGateway.Contracts.Management.V1;
+using LtiIntegrationGateway.Features.Channels;
 
 namespace LtiIntegrationGateway.Features.Management;
 
@@ -104,6 +106,56 @@ public sealed partial class ManagementApiService
         await AuditAsync("RollbackChannelRevision", request.ChannelName, succeeded, result.Problems, context.CancellationToken);
 
         return ToChannelResponse(succeeded, result.Problems, channelId, result.RevisionNumber);
+    }
+
+    public override async Task<GetChannelHealthResponse> GetChannelHealth(
+        GetChannelHealthRequest request,
+        ServerCallContext context)
+    {
+        var result = await _getChannelHealth.HandleAsync(
+            new GetChannelHealthQuery(request.ChannelName),
+            context.CancellationToken);
+
+        if (result.Health is null)
+        {
+            // Отказ уже записан в аудит срезом: здесь остаётся только код gRPC / HTTP.
+            throw new RpcException(new Status(StatusCode.NotFound, "channel not found"));
+        }
+
+        return ToHealthResponse(result.Health);
+    }
+
+    /// <summary>
+    /// Отображает состояние канала в proto-сообщение. Значение секрета в ответ не попадает: срез
+    /// возвращает только имя ключа конфигурации.
+    /// </summary>
+    private static GetChannelHealthResponse ToHealthResponse(ChannelHealthDetails health)
+    {
+        var response = new GetChannelHealthResponse
+        {
+            ChannelName = health.ChannelName,
+            State = health.State,
+            ActiveRevision = health.ActiveRevision,
+            SecretConfigured = health.SecretConfigured,
+            SecretConfigKey = health.SecretConfigKey,
+            CheckedAt = Timestamp.FromDateTimeOffset(health.CheckedAt),
+        };
+
+        if (health.CertificateExpiresAt is { } expiresAt)
+        {
+            response.CertificateExpiresAt = Timestamp.FromDateTimeOffset(expiresAt);
+        }
+
+        response.Errors.AddRange(health.Errors.Select(error => new ChannelHealthError
+        {
+            OccurredAt = Timestamp.FromDateTimeOffset(error.OccurredAt),
+            Direction = error.Direction,
+            ErrorCode = error.ErrorCode,
+            HttpStatus = error.HttpStatus,
+            Outcome = error.Outcome,
+        }));
+
+        return response;
     }
 
     private static int? Optional(int revision) => revision <= 0 ? null : revision;

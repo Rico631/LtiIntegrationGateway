@@ -12,7 +12,8 @@ namespace LtiIntegrationGateway.Infrastructure.Routing;
 /// </summary>
 public sealed class InboundEndpointDataSource(
     InboundRouteCatalog catalog,
-    InboundRequestHandler requestHandler) : EndpointDataSource
+    InboundRequestHandler requestHandler,
+    InboundDisabledOperationHandler disabledOperationHandler) : EndpointDataSource
 {
     private readonly object _gate = new();
 
@@ -45,8 +46,14 @@ public sealed class InboundEndpointDataSource(
 
     private Endpoint BuildEndpoint(InboundRouteDefinition route)
     {
+        // Отключённая операция не обслуживает вызовы: тот же маршрут, но обработчик отвечает 404 и
+        // пишет запись аудита (ADR §7.3); конфликты маршрутов проверяются для всех операций.
+        var handler = route.Enabled
+            ? new RequestDelegate(requestHandler.HandleAsync)
+            : disabledOperationHandler.HandleAsync;
+
         var builder = new RouteEndpointBuilder(
-            requestHandler.HandleAsync,
+            handler,
             RoutePatternFactory.Parse(route.Template),
             order: 0);
 

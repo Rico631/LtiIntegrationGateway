@@ -62,7 +62,7 @@ public class ContractSettingsApiTests
                 Version = 1,
                 Settings = new ContractVersionSettings
                 {
-                    RecipientQueue = "product.inbound",
+                    RecipientQueue = "dpv.inbox",
                     AuthType = "api_key",
                     ConfigKey = "bank-a.inbound",
                     HeaderName = "X-Bank-Key",
@@ -79,7 +79,7 @@ public class ContractSettingsApiTests
             ManagementApi.Call());
 
         await Assert.That(read.Status).IsEqualTo("Draft");
-        await Assert.That(read.Settings.RecipientQueue).IsEqualTo("product.inbound");
+        await Assert.That(read.Settings.RecipientQueue).IsEqualTo("dpv.inbox");
         await Assert.That(read.Settings.AuthType).IsEqualTo("api_key");
         await Assert.That(read.Settings.ConfigKey).IsEqualTo("bank-a.inbound");
         await Assert.That(read.Settings.HeaderName).IsEqualTo("X-Bank-Key");
@@ -102,7 +102,7 @@ public class ContractSettingsApiTests
             {
                 ChannelName = "bank-a",
                 Version = 1,
-                Settings = new ContractVersionSettings { RecipientQueue = "product.inbound" },
+                Settings = new ContractVersionSettings { RecipientQueue = "dpv.inbox" },
             },
             ManagementApi.Call());
 
@@ -117,7 +117,7 @@ public class ContractSettingsApiTests
             {
                 ChannelName = "bank-a",
                 Version = 1,
-                Settings = new ContractVersionSettings { RecipientQueue = "product.other" },
+                Settings = new ContractVersionSettings { RecipientQueue = "other.inbox" },
             },
             ManagementApi.Call());
 
@@ -128,7 +128,7 @@ public class ContractSettingsApiTests
             new GetContractVersionRequest { ChannelName = "bank-a", Version = 1 },
             ManagementApi.Call());
 
-        await Assert.That(read.Settings.RecipientQueue).IsEqualTo("product.inbound");
+        await Assert.That(read.Settings.RecipientQueue).IsEqualTo("dpv.inbox");
         await Assert.That(read.Status).IsEqualTo("Published");
         await Assert.That(read.Operations.Count).IsEqualTo(1);
         await Assert.That(read.Operations[0].Template).IsEqualTo("/callbacks/contracts");

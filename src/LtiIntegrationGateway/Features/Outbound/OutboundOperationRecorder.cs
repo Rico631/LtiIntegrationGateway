@@ -19,6 +19,14 @@ public static class OutcomeNames
         Outcome.TransportError => TransportError,
         _ => GatewayRefused,
     };
+
+    /// <summary>Обратное преобразование сохранённого имени исхода; неизвестное значение — отказ шлюза.</summary>
+    public static Outcome ToOutcome(string? name) => name switch
+    {
+        HttpResponse => Outcome.HttpResponse,
+        TransportError => Outcome.TransportError,
+        _ => Outcome.GatewayRefused,
+    };
 }
 
 /// <summary>Состояние операции и журнал: пишутся одной транзакцией до доставки результата.</summary>
@@ -79,37 +87,66 @@ public sealed class OutboundOperationRecorder(GatewayDbContext db)
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task CompleteAsync(
+    /// <summary>
+    /// Фиксирует завершение операции и создаёт запись журнала; возвращает созданную запись, чтобы
+    /// признак доставки ставился только ей.
+    /// </summary>
+    public async Task<OutboundMessageLog> CompleteAsync(
         OutboundOperation operation,
         OutboundRequest request,
+        string? deliveryAddress,
+        int? channelRevisionNumber,
         OutboundHttpOutcome outcome,
         CancellationToken cancellationToken = default)
     {
+        var completedAt = DateTimeOffset.UtcNow;
+
         operation.Status = OutboundOperationStatus.Completed;
         operation.Outcome = OutcomeNames.Of(outcome.Outcome);
         operation.HttpStatusCode = outcome.HttpStatusCode;
         operation.ErrorCode = outcome.ErrorCode;
+        operation.CorrelationId = string.IsNullOrWhiteSpace(request.CorrelationId) ? null : request.CorrelationId;
         operation.AttemptCount = outcome.AttemptCount;
-        operation.CompletedAt = DateTimeOffset.UtcNow;
+        operation.CompletedAt = completedAt;
 
-        db.OutboundMessageLogs.Add(new OutboundMessageLog
+        var log = new OutboundMessageLog
         {
             Id = Guid.NewGuid(),
             MessageId = request.MessageId,
             ProductId = request.ProductId,
             ChannelName = request.ChannelName,
+            DeliveryAddress = deliveryAddress ?? string.Empty,
             HttpMethod = request.HttpMethod,
             RelativePath = request.RelativePath,
             RequestBody = request.Body.ToByteArray(),
             ResponseBody = outcome.ResponseBody,
-            ContentType = outcome.ContentType ?? request.ContentType,
+            // Тип содержимого ответа фиксируется без подстановки типа запроса: повтор результата
+            // строится из этой колонки и обязан совпасть с первым результатом.
+            ContentType = outcome.ContentType,
             HttpStatusCode = outcome.HttpStatusCode,
             Outcome = OutcomeNames.Of(outcome.Outcome),
             ErrorCode = outcome.ErrorCode,
+            ErrorMessage = outcome.ErrorMessage,
+            ChannelRevisionNumber = channelRevisionNumber,
             AttemptCount = outcome.AttemptCount,
             DeliveryStatus = OutboundDeliveryStatus.Pending,
-            CreatedAt = DateTimeOffset.UtcNow,
-        });
+            CreatedAt = completedAt,
+            CreatedAtUnixMs = completedAt.ToUnixTimeMilliseconds(),
+        };
+
+        db.OutboundMessageLogs.Add(log);
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return log;
+    }
+
+    /// <summary>Фиксирует признак доставки у уже загруженной записи журнала, без повторного чтения.</summary>
+    public async Task MarkDeliveredAsync(OutboundMessageLog log, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(log);
+
+        log.DeliveryStatus = OutboundDeliveryStatus.Sent;
 
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -124,8 +161,6 @@ public sealed class OutboundOperationRecorder(GatewayDbContext db)
             return;
         }
 
-        log.DeliveryStatus = OutboundDeliveryStatus.Sent;
-
-        await db.SaveChangesAsync(cancellationToken);
+        await MarkDeliveredAsync(log, cancellationToken);
     }
 }

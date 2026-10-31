@@ -6,6 +6,7 @@ using LtiIntegrationGateway.Infrastructure.Persistence;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
 using LtiIntegrationGateway.Infrastructure.Rebus;
 using LtiIntegrationGateway.Infrastructure.Security;
+using Microsoft.Extensions.DependencyInjection;
 using Rebus.Activation;
 using Rebus.Bus;
 using Rebus.Config;
@@ -99,10 +100,13 @@ public sealed class OutboundFixture : IAsyncDisposable
 {
     public const string ProductId = "dpv";
     public const string ChannelName = "bank-a";
-    public const string ProductInbox = "product.inbox";
+
+    /// <summary>Вычисленный адрес очереди продукта: <c>product_id</c> + <c>.inbox</c> (ADR §10.2).</summary>
+    public const string ProductInbox = "dpv.inbox";
 
     private readonly IBus _gatewayBus;
     private readonly IBus _productBus;
+    private readonly List<ServiceProvider> _providers = [];
 
     public OutboundFixture()
     {
@@ -116,23 +120,29 @@ public sealed class OutboundFixture : IAsyncDisposable
         productActivator.Register(() => Results);
 
         _productBus = Configure.With(productActivator)
-            .Transport(transport => transport.UseInMemoryTransport(network, ProductInbox))
+            .Transport(transport => transport.UseInMemoryTransport(network, QueueNames.ProductInbox(ProductId)))
             .Serialization(serialization => serialization.Register(_ => serializer))
             .Start();
 
         _gatewayBus = Configure.With(new BuiltinHandlerActivator())
-            .Transport(transport => transport.UseInMemoryTransport(network, RebusConfigurationExtensions.OutboundQueue))
+            .Transport(transport => transport.UseInMemoryTransport(network, QueueNames.OutboundQueue))
             .Serialization(serialization => serialization.Register(_ => serializer))
             .Start();
+
+        ChannelClients = new RecordingChannelHttpClientFactory(Http);
     }
 
     public SqliteInMemoryDatabase Database { get; }
 
     public RecordingHttpMessageHandler Http { get; } = new();
 
+    public RecordingChannelHttpClientFactory ChannelClients { get; }
+
     public CollectingResultHandler Results { get; } = new();
 
     public TestSecretStore Secrets { get; } = new();
+
+    public TestChannelCertificateStore Certificates { get; } = new();
 
     public GatewayDbContext CreateDb() => Database.CreateContext();
 
@@ -144,12 +154,14 @@ public sealed class OutboundFixture : IAsyncDisposable
         IReadOnlyList<string>? allowedMethods = null,
         IReadOnlyList<string>? allowedPaths = null,
         int perAttemptTimeoutMs = 5000,
-        int overallCapMs = 30000)
+        int overallCapMs = 30000,
+        string channelName = ChannelName,
+        string baseUrl = "https://bank-a.example")
     {
         using var db = CreateDb();
 
         var configuration = new ChannelConfiguration(
-            "https://bank-a.example",
+            baseUrl,
             authType,
             configKey,
             headerName,
@@ -160,7 +172,7 @@ public sealed class OutboundFixture : IAsyncDisposable
             allowedMethods ?? ["GET", "POST"],
             allowedPaths ?? ["/api/contracts", "/api/contracts/{id}"]);
 
-        var created = await new CreateChannelHandler(db).HandleAsync(new CreateChannelCommand(ChannelName, configuration));
+        var created = await new CreateChannelHandler(db).HandleAsync(new CreateChannelCommand(channelName, configuration));
 
         await new PublishChannelRevisionHandler(db, new ChannelConfigurationValidator())
             .HandleAsync(new PublishChannelRevisionCommand(created.ChannelId!.Value, 1));
@@ -171,23 +183,56 @@ public sealed class OutboundFixture : IAsyncDisposable
         return created.ChannelId!.Value;
     }
 
-    public async Task RegisterProductAsync()
+    public async Task RegisterProductAsync(
+        IReadOnlyList<string>? channels = null,
+        IReadOnlyList<string>? addresses = null)
     {
         using var db = CreateDb();
 
+        // По умолчанию маршрут регистрируется без адресов: шлюз сохраняет вычисленный <product_id>.inbox.
         await new RegisterProductRouteHandler(db).HandleAsync(new RegisterProductRouteCommand(
             ProductId,
-            [ChannelName],
-            [ProductInbox]));
+            channels ?? [ChannelName],
+            addresses ?? []));
     }
 
-    public ProcessOutboundRequestHandler CreateProcessor(GatewayDbContext db) => new(
+    public ProcessOutboundRequestHandler CreateProcessor(GatewayDbContext db, IBus? bus = null) => new(
         new ResolveSenderIdentityHandler(db),
         new LoadActiveChannelHandler(db),
-        new ResolveAuthorizationHandler(Secrets),
-        new ExecuteHttpCallHandler(new StubHttpClientFactory(Http)),
+        new ResolveAuthorizationHandler(Secrets, Certificates),
+        new ExecuteHttpCallHandler(ChannelClients),
         new OutboundOperationRecorder(db),
-        new PublishOutboundResultHandler(_gatewayBus, new OutboundOperationRecorder(db)));
+        new StoredOutboundResultFactory(),
+        new PublishOutboundResultHandler(bus ?? _gatewayBus, new OutboundOperationRecorder(db)));
+
+    /// <summary>
+    /// Собирает диспетчер с обычным для приложения жизненным циклом зависимостей: контекст БД на цикл,
+    /// восстановление результата, отправка через <see cref="PublishOutboundResultHandler"/>.
+    /// </summary>
+    public OutboundResultDispatcher CreateDispatcher(
+        IBus? bus = null,
+        Action<OutboundDeliveryOptions>? configure = null,
+        TimeProvider? timeProvider = null)
+    {
+        var options = new OutboundDeliveryOptions();
+        configure?.Invoke(options);
+
+        var services = new ServiceCollection();
+
+        services.AddLogging();
+        services.AddSingleton(bus ?? _gatewayBus);
+        services.AddScoped(_ => CreateDb());
+        services.AddScoped<OutboundOperationRecorder>();
+        services.AddScoped<PublishOutboundResultHandler>();
+        services.AddSingleton<StoredOutboundResultFactory>();
+        services.AddSingleton(Microsoft.Extensions.Options.Options.Create(options));
+        services.AddSingleton(timeProvider ?? TimeProvider.System);
+
+        var provider = services.BuildServiceProvider();
+        _providers.Add(provider);
+
+        return ActivatorUtilities.CreateInstance<OutboundResultDispatcher>(provider);
+    }
 
     public static OutboundRequest CreateRequest(
         string messageId = "msg-1",
@@ -195,13 +240,14 @@ public sealed class OutboundFixture : IAsyncDisposable
         string relativePath = "/api/contracts",
         string? idempotencyKey = null,
         byte[]? body = null,
-        string? contentType = null)
+        string? contentType = null,
+        string channelName = ChannelName)
     {
         var request = new OutboundRequest
         {
             MessageId = messageId,
             ProductId = ProductId,
-            ChannelName = ChannelName,
+            ChannelName = channelName,
             RelativePath = relativePath,
             HttpMethod = method,
             Body = Google.Protobuf.ByteString.CopyFrom(body ?? []),
@@ -222,8 +268,14 @@ public sealed class OutboundFixture : IAsyncDisposable
 
     public ValueTask DisposeAsync()
     {
+        foreach (var provider in _providers)
+        {
+            provider.Dispose();
+        }
+
         _gatewayBus.Dispose();
         _productBus.Dispose();
+        Certificates.Dispose();
         Database.Dispose();
 
         return ValueTask.CompletedTask;

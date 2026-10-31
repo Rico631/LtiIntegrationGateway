@@ -10,7 +10,7 @@ namespace LtiIntegrationGateway.Tests.Features.Inbound;
 
 public class InboundRoutingTests
 {
-    private const string RecipientQueue = "product.inbound";
+    private const string RecipientQueue = "dpv.inbox";
 
     private static InboundRouteSet Set(
         string revisionKey,

@@ -85,4 +85,16 @@ public sealed class ContractOperation
     /// <c>{ "application/json": { ... } }</c>; локальные <c>$ref</c> уже развёрнуты.
     /// </summary>
     public string? RequestSchemas { get; set; }
+
+    /// <summary>Признак обслуживания операции: отключённая операция отвечает 404 и пишется в аудит.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Переопределение очереди получателя; null — очередь версии контракта.</summary>
+    public string? RecipientQueue { get; set; }
+
+    /// <summary>Переопределение квоты запросов на окно; null — квота версии или приложения.</summary>
+    public int? RateLimitPermit { get; set; }
+
+    /// <summary>Переопределение окна квоты в секундах; null — окно версии или приложения.</summary>
+    public int? RateLimitWindowSeconds { get; set; }
 }

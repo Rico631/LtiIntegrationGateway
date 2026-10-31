@@ -4,6 +4,7 @@ using LtiIntegrationGateway.Infrastructure.Persistence;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
 using LtiIntegrationGateway.Infrastructure.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace LtiIntegrationGateway.Features.Contracts;
 
@@ -16,6 +17,7 @@ public sealed class ActivateContractVersionHandler(
     GatewayDbContext db,
     InboundRouteCatalog catalog,
     InboundSchemaCache schemaCache,
+    IOptions<InboundRateLimitOptions> rateLimitOptions,
     ManagementAuditWriter audit)
 {
     public async Task<ActivateContractVersionResult> HandleAsync(
@@ -64,7 +66,13 @@ public sealed class ActivateContractVersionHandler(
             catalog.Deactivate(ContractRouteSets.RevisionKey(previous.Id));
         }
 
-        var candidate = ContractRouteSets.Build(version.Id, channelName, version.Operations, ContractVersionSettings.From(version));
+        var candidate = ContractRouteSets.Build(
+            version.Id,
+            channelName,
+            version.Operations,
+            ContractVersionSettings.From(version),
+            rateLimitOptions.Value);
+
         var activation = catalog.Activate(candidate);
 
         if (!activation.Succeeded)
@@ -115,11 +123,16 @@ public sealed class ActivateContractVersionHandler(
         return new ActivateContractVersionResult(version.Version, []);
     }
 
-    private static void Restore(InboundRouteCatalog catalog, ContractVersion? previous, string channelName)
+    private void Restore(InboundRouteCatalog catalog, ContractVersion? previous, string channelName)
     {
         if (previous is not null)
         {
-            catalog.Activate(ContractRouteSets.Build(previous.Id, channelName, previous.Operations, ContractVersionSettings.From(previous)));
+            catalog.Activate(ContractRouteSets.Build(
+                previous.Id,
+                channelName,
+                previous.Operations,
+                ContractVersionSettings.From(previous),
+                rateLimitOptions.Value));
         }
     }
 

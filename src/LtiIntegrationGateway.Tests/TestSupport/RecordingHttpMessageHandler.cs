@@ -19,7 +19,11 @@ public sealed class RecordingHttpMessageHandler : HttpMessageHandler
 
     public int CallCount => _requests.Count;
 
-    public void EnqueueResponse(HttpStatusCode status, string body = "{}", string contentType = "application/json")
+    public void EnqueueResponse(
+        HttpStatusCode status,
+        string body = "{}",
+        string contentType = "application/json",
+        string? location = null)
     {
         _responders.Enqueue(_ =>
         {
@@ -27,7 +31,14 @@ public sealed class RecordingHttpMessageHandler : HttpMessageHandler
             content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
             content.Headers.ContentType.CharSet = null;
 
-            return new HttpResponseMessage(status) { Content = content };
+            var response = new HttpResponseMessage(status) { Content = content };
+
+            if (location is not null)
+            {
+                response.Headers.Location = new Uri(location, UriKind.Absolute);
+            }
+
+            return response;
         });
     }
 
@@ -58,10 +69,4 @@ public sealed class RecordingHttpMessageHandler : HttpMessageHandler
 
         return Task.FromResult(_responders.Dequeue()(request));
     }
-}
-
-/// <summary>Фабрика клиентов, всегда отдающая клиент с одним тестовым обработчиком.</summary>
-public sealed class StubHttpClientFactory(RecordingHttpMessageHandler handler) : IHttpClientFactory
-{
-    public HttpClient CreateClient(string name) => new(handler, disposeHandler: false);
 }
