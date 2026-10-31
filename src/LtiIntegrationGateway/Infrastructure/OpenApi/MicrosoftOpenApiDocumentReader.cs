@@ -69,7 +69,7 @@ public sealed class MicrosoftOpenApiDocumentReader : IOpenApiDocumentReader
         {
             using var stream = new MemoryStream(Encoding.UTF8.GetBytes(document));
 
-            var result = await OpenApiDocument.LoadAsync(stream);
+            var result = await OpenApiDocument.LoadAsync(stream, cancellationToken: cancellationToken);
 
             if (result.Document is not null)
             {

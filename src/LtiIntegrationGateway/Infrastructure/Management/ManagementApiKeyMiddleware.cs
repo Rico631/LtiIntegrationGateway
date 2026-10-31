@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
@@ -80,8 +81,8 @@ public sealed class ManagementApiKeyMiddleware(
         {
             context.Response.StatusCode = StatusCodes.Status200OK;
             context.Response.ContentType = "application/grpc";
-            context.Response.Headers["grpc-status"] = UnauthenticatedGrpcStatus.ToString();
-            context.Response.Headers["grpc-message"] = "unauthenticated";
+            context.Response.Headers.GrpcStatus = UnauthenticatedGrpcStatus.ToString(CultureInfo.InvariantCulture);
+            context.Response.Headers.GrpcMessage = "unauthenticated";
 
             return;
         }

@@ -2,7 +2,6 @@ using System.Net;
 using Grpc.Core;
 using LtiIntegrationGateway.Contracts.Management.V1;
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
 using LtiIntegrationGateway.Tests.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 

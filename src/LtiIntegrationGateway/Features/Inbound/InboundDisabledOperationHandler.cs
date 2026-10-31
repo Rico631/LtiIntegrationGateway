@@ -1,6 +1,5 @@
 using LtiIntegrationGateway.Infrastructure.Management;
 using LtiIntegrationGateway.Infrastructure.Routing;
-using Microsoft.AspNetCore.Routing;
 
 namespace LtiIntegrationGateway.Features.Inbound;
 

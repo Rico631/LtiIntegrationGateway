@@ -1,8 +1,6 @@
-using System.Text;
 using Google.Protobuf;
 using LtiIntegrationGateway.Contracts;
 using LtiIntegrationGateway.Contracts.Messages.V1;
-using LtiIntegrationGateway.Tests.TestSupport;
 
 namespace LtiIntegrationGateway.Tests.Contracts;
 

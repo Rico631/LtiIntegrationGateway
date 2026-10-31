@@ -1,5 +1,4 @@
 using LtiIntegrationGateway.Infrastructure.Persistence;
-using LtiIntegrationGateway.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace LtiIntegrationGateway.Features.Contracts;

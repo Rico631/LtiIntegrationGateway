@@ -1,6 +1,5 @@
 using System.Net;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using LtiIntegrationGateway.Contracts.Management.V1;
 using LtiIntegrationGateway.Infrastructure.Persistence;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities;

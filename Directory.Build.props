@@ -1,0 +1,34 @@
+<Project>
+  <PropertyGroup>
+    <!-- Framework -->
+    <TargetFramework>net10.0</TargetFramework>
+
+    <!-- Language -->
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- Code analysis -->
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <AnalysisMode>Recommended</AnalysisMode>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+
+    <!-- Warnings -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);IDE0290</WarningsNotAsErrors>
+
+    <!-- Compiler -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+
+    <!-- Documentation -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!-- CS1591/CA1848: документируются контракты .proto (AGENTS.md). CA1861/CA1859/CA1873 —
+         микрооптимизации, конфликтующие с читаемостью. CA1001 — синглтон живёт всё приложение;
+         ASP0027 — Program остаётся public для WebApplicationFactory тестов; CA1707 — имена
+         тестов читаются как предложения с подчёркиваниями. -->
+    <NoWarn>$(NoWarn);CS1591;CA1848;CA1861;CA1859;CA1873;CA1001;ASP0027;CA1707</NoWarn>
+  </PropertyGroup>
+</Project>

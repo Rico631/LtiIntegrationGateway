@@ -38,7 +38,7 @@ public class SchemaValidationProbeTests
 
         var errors = schema.Validate("""{ "amount": 10 }""");
 
-        await Assert.That(errors.Count()).IsEqualTo(1);
+        await Assert.That(errors.Count).IsEqualTo(1);
     }
 
     [Test]
@@ -48,7 +48,7 @@ public class SchemaValidationProbeTests
 
         var errors = schema.Validate("""{ "contractNumber": "x", "extra": 1 }""");
 
-        await Assert.That(errors.Any()).IsTrue();
+        await Assert.That(errors.Count > 0).IsTrue();
     }
 
     [Test]

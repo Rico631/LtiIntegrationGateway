@@ -1,4 +1,3 @@
-using Google.Protobuf;
 using LtiIntegrationGateway.Contracts.Messages.V1;
 using LtiIntegrationGateway.Infrastructure.Persistence;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities;

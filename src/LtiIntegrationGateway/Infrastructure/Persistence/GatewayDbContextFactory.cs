@@ -1,4 +1,3 @@
-using LtiIntegrationGateway.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 

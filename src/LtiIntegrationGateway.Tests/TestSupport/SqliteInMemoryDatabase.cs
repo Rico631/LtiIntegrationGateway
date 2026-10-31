@@ -1,6 +1,7 @@
+using System.Globalization;
+using LtiIntegrationGateway.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using LtiIntegrationGateway.Infrastructure.Persistence;
 
 namespace LtiIntegrationGateway.Tests.TestSupport;
 
@@ -42,7 +43,7 @@ public sealed class SqliteInMemoryDatabase : IDisposable
 
         var result = await command.ExecuteScalarAsync();
 
-        return Convert.ToInt64(result);
+        return Convert.ToInt64(result, CultureInfo.InvariantCulture);
     }
 
     public void Dispose() => _connection.Dispose();

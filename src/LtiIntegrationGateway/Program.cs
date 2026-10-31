@@ -14,8 +14,6 @@ using LtiIntegrationGateway.Infrastructure.Rebus;
 using LtiIntegrationGateway.Infrastructure.Routing;
 using LtiIntegrationGateway.Infrastructure.Security;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Rebus.Handlers;

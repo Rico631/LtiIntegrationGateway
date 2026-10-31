@@ -1,7 +1,6 @@
 using System.Net;
 using Grpc.Net.Client;
 using LtiIntegrationGateway.Contracts.Management.V1;
-using LtiIntegrationGateway.Features.Inbound;
 using LtiIntegrationGateway.Infrastructure.Management;
 using LtiIntegrationGateway.Infrastructure.Persistence;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities;

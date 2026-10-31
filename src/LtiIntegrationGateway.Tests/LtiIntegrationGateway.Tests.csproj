@@ -1,12 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
     <!-- .NET 10 SDK: без этого dotnet test упирается в неподдерживаемый VSTest-таргет MTP -->
     <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <!-- API тестовых фикстур задаётся удобством вызова, а не статикой. -->
+    <NoWarn>$(NoWarn);CA1822</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
