@@ -26,7 +26,7 @@ public sealed class GetContractVersionHandler(GatewayDbContext db)
         var version = await db.ContractVersions
             .AsNoTracking()
             .Include(entity => entity.Operations)
-            .Where(entity => entity.Channel!.Name == query.ChannelName && entity.Version == query.Version)
+            .Where(entity => entity.InboundChannel!.Name == query.ChannelName && entity.Version == query.Version)
             .SingleOrDefaultAsync(cancellationToken);
 
         if (version is null)

@@ -21,6 +21,8 @@ public sealed class ProtobufMessageRegistry
             OutboundRequest.Descriptor,
             OutboundResult.Descriptor,
             InboundMessage.Descriptor,
+            InboundResponse.Descriptor,
+            InboundResponseHeader.Descriptor,
             QueryParameter.Descriptor,
         ])
     {

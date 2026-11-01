@@ -1,3 +1,5 @@
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
+
 namespace LtiIntegrationGateway.Infrastructure.Routing;
 
 /// <summary>
@@ -54,6 +56,53 @@ public sealed class InboundRouteCatalog
             NotifyChanged();
 
             return new InboundRouteActivationResult([]);
+        }
+    }
+
+    /// <summary>
+    /// Обновляет snapshot режима и timeout для уже активных маршрутов канала. Уже начатые
+    /// ожидания сохраняют прежние значения, потому что обработчик получил их из метаданных.
+    /// </summary>
+    public void UpdateResponseSettings(
+        string channelName,
+        InboundResponseMode responseMode,
+        int inboundResponseTimeoutMs)
+    {
+        if (string.IsNullOrWhiteSpace(channelName))
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            var changed = false;
+
+            foreach (var pair in _sets.ToArray())
+            {
+                if (!pair.Value.Routes.Any(route => route.ChannelName == channelName))
+                {
+                    continue;
+                }
+
+                var routes = pair.Value.Routes
+                    .Select(route => route.ChannelName == channelName
+                        ? route with
+                        {
+                            ResponseMode = responseMode,
+                            InboundResponseTimeoutMs = inboundResponseTimeoutMs,
+                        }
+                        : route)
+                    .ToArray();
+
+                _sets[pair.Key] = pair.Value with { Routes = routes };
+                changed = true;
+            }
+
+            if (changed)
+            {
+                RebuildSnapshot();
+                NotifyChanged();
+            }
         }
     }
 

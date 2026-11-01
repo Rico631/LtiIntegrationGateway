@@ -14,7 +14,7 @@ namespace LtiIntegrationGateway.Features.Management;
 /// <summary>Операции версий OpenAPI-контрактов.</summary>
 public sealed partial class ManagementApiService
 {
-    public override async Task<ContractOperationResponse> UploadContract(
+    public override async Task<ContractOperationResponse> UploadInboundContractVersion(
         UploadContractRequest request,
         ServerCallContext context)
     {
@@ -32,7 +32,7 @@ public sealed partial class ManagementApiService
         return ToContractResponse(result.Problems.Count == 0, result.Version, result.SourceFormat, result.Problems, result.Warnings);
     }
 
-    public override async Task<ContractOperationResponse> PublishContractVersion(
+    public override async Task<ContractOperationResponse> PublishInboundContractVersion(
         PublishContractVersionRequest request,
         ServerCallContext context)
     {
@@ -52,7 +52,7 @@ public sealed partial class ManagementApiService
         return ToContractResponse(result.Problems.Count == 0, result.Version, null, result.Problems, []);
     }
 
-    public override async Task<ContractOperationResponse> ActivateContractVersion(
+    public override async Task<ContractOperationResponse> ActivateInboundContractVersion(
         ActivateContractVersionRequest request,
         ServerCallContext context)
     {
@@ -72,7 +72,7 @@ public sealed partial class ManagementApiService
         return ToContractResponse(result.Problems.Count == 0, result.Version, null, result.Problems, []);
     }
 
-    public override async Task<ListContractOperationsResponse> ListContractOperations(
+    public override async Task<ListContractOperationsResponse> ListInboundContractOperations(
         ListContractOperationsRequest request,
         ServerCallContext context)
     {
@@ -106,7 +106,7 @@ public sealed partial class ManagementApiService
         return response;
     }
 
-    public override async Task<GetContractVersionResponse> GetContractVersion(
+    public override async Task<GetContractVersionResponse> GetInboundContractVersion(
         GetContractVersionRequest request,
         ServerCallContext context)
     {
@@ -138,7 +138,7 @@ public sealed partial class ManagementApiService
         return response;
     }
 
-    public override async Task<ContractOperationResponse> UpdateContractVersionSettings(
+    public override async Task<ContractOperationResponse> UpdateInboundContractVersionSettings(
         UpdateContractVersionSettingsRequest request,
         ServerCallContext context)
     {
@@ -178,7 +178,7 @@ public sealed partial class ManagementApiService
         return ToContractResponse(result.Problems.Count == 0, result.Version, null, result.Problems, []);
     }
 
-    public override async Task<ContractOperationResponse> UpdateContractOperationSettings(
+    public override async Task<ContractOperationResponse> UpdateInboundContractOperationSettings(
         UpdateContractOperationSettingsRequest request,
         ServerCallContext context)
     {

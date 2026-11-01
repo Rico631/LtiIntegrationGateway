@@ -25,9 +25,9 @@ public sealed class UpdateContractVersionSettingsHandler(GatewayDbContext db, Ma
         var target = $"{command.ChannelName}:v{command.Version}";
 
         var version = await db.ContractVersions
-            .Include(entity => entity.Channel)
+            .Include(entity => entity.InboundChannel)
             .SingleOrDefaultAsync(
-                entity => entity.Channel!.Name == command.ChannelName && entity.Version == command.Version,
+                entity => entity.InboundChannel!.Name == command.ChannelName && entity.Version == command.Version,
                 cancellationToken);
 
         if (version is null)

@@ -53,18 +53,18 @@ public class ManagementApiTests
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var client = ManagementApi.CreateClient(factory);
 
-        await client.PostAsync("/v1/channels", CreateChannelBody("bank-a"));
-        await client.PostAsync("/v1/channels", CreateChannelBody("bank-b"));
+        await client.PostAsync("/v1/outbound-channels", CreateChannelBody("bank-a"));
+        await client.PostAsync("/v1/outbound-channels", CreateChannelBody("bank-b"));
 
-        var restJson = await ReadJsonAsync(await client.GetAsync("/v1/channels"));
+        var restJson = await ReadJsonAsync(await client.GetAsync("/v1/outbound-channels"));
         var restNames = restJson.GetProperty("channels")
             .EnumerateArray()
-            .Select(channel => channel.GetProperty("name").GetString() ?? string.Empty)
+            .Select(OutboundChannel => OutboundChannel.GetProperty("name").GetString() ?? string.Empty)
             .ToArray();
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpcClient = new ManagementService.ManagementServiceClient(channel);
-        var grpcResponse = await grpcClient.ListChannelsAsync(new ListChannelsRequest(), ManagementApi.Call());
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpcClient = new ManagementService.ManagementServiceClient(OutboundChannel);
+        var grpcResponse = await grpcClient.ListOutboundChannelsAsync(new ListChannelsRequest(), ManagementApi.Call());
         var grpcNames = grpcResponse.Channels.Select(item => item.Name).ToArray();
 
         await Assert.That(restNames).IsEquivalentTo(grpcNames);
@@ -77,41 +77,41 @@ public class ManagementApiTests
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var client = ManagementApi.CreateClient(factory);
 
-        var created = await ReadJsonAsync(await client.PostAsync("/v1/channels", CreateChannelBody("bank-a")));
+        var created = await ReadJsonAsync(await client.PostAsync("/v1/outbound-channels", CreateChannelBody("bank-a")));
 
         await Assert.That(created.GetProperty("succeeded").GetBoolean()).IsTrue();
         await Assert.That(created.GetProperty("channelId").GetString()).IsNotEmpty();
         await Assert.That(created.GetProperty("revision").GetInt32()).IsEqualTo(1);
 
         var updated = await ReadJsonAsync(await client.PatchAsync(
-            "/v1/channels/bank-a/draft",
+            "/v1/outbound-channels/bank-a/draft",
             UpdateDraftBody(1, "https://bank-a.example")));
 
         await Assert.That(updated.GetProperty("succeeded").GetBoolean()).IsTrue();
 
-        var published = await ReadJsonAsync(await client.PostAsync("/v1/channels/bank-a/revisions/1/publish", null));
+        var published = await ReadJsonAsync(await client.PostAsync("/v1/outbound-channels/bank-a/revisions/1/publish", null));
 
         await Assert.That(published.GetProperty("succeeded").GetBoolean()).IsTrue();
 
-        var activated = await ReadJsonAsync(await client.PostAsync("/v1/channels/bank-a/revisions/1/activate", null));
+        var activated = await ReadJsonAsync(await client.PostAsync("/v1/outbound-channels/bank-a/revisions/1/activate", null));
 
         await Assert.That(activated.GetProperty("succeeded").GetBoolean()).IsTrue();
 
-        var channelJson = await ReadJsonAsync(await client.GetAsync("/v1/channels/bank-a"));
+        var channelJson = await ReadJsonAsync(await client.GetAsync("/v1/outbound-channels/bank-a"));
         var activeSettings = channelJson.GetProperty("channel").GetProperty("activeSettings");
 
         await Assert.That(activeSettings.TryGetProperty("allowedMethods", out _)).IsFalse();
         await Assert.That(activeSettings.TryGetProperty("allowedPaths", out _)).IsFalse();
 
-        await client.PatchAsync("/v1/channels/bank-a/draft", UpdateDraftBody(0, "https://bank-a2.example"));
-        await client.PostAsync("/v1/channels/bank-a/revisions/2/publish", null);
-        await client.PostAsync("/v1/channels/bank-a/revisions/2/activate", null);
+        await client.PatchAsync("/v1/outbound-channels/bank-a/draft", UpdateDraftBody(0, "https://bank-a2.example"));
+        await client.PostAsync("/v1/outbound-channels/bank-a/revisions/2/publish", null);
+        await client.PostAsync("/v1/outbound-channels/bank-a/revisions/2/activate", null);
 
-        var rolledBack = await ReadJsonAsync(await client.PostAsync("/v1/channels/bank-a/rollback", null));
+        var rolledBack = await ReadJsonAsync(await client.PostAsync("/v1/outbound-channels/bank-a/rollback", null));
 
         await Assert.That(rolledBack.GetProperty("succeeded").GetBoolean()).IsTrue();
 
-        var afterRollback = await ReadJsonAsync(await client.GetAsync("/v1/channels/bank-a"));
+        var afterRollback = await ReadJsonAsync(await client.GetAsync("/v1/outbound-channels/bank-a"));
 
         await Assert.That(afterRollback.GetProperty("channel").GetProperty("revisions")
             .EnumerateArray()
@@ -125,24 +125,24 @@ public class ManagementApiTests
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var client = ManagementApi.CreateClient(factory);
 
-        await client.PostAsync("/v1/channels", CreateChannelBody("bank-a"));
-        await client.PatchAsync("/v1/channels/bank-a/draft", UpdateDraftBody(1, "https://bank-a.example"));
-        await client.PostAsync("/v1/channels/bank-a/revisions/1/publish", null);
-        await client.PostAsync("/v1/channels/bank-a/revisions/1/activate", null);
+        await client.PostAsync("/v1/outbound-channels", CreateChannelBody("bank-a"));
+        await client.PatchAsync("/v1/outbound-channels/bank-a/draft", UpdateDraftBody(1, "https://bank-a.example"));
+        await client.PostAsync("/v1/outbound-channels/bank-a/revisions/1/publish", null);
+        await client.PostAsync("/v1/outbound-channels/bank-a/revisions/1/activate", null);
 
         // Новый черновик с недопустимым URL.
-        await client.PatchAsync("/v1/channels/bank-a/draft", Body(JsonSerializer.Serialize(new
+        await client.PatchAsync("/v1/outbound-channels/bank-a/draft", Body(JsonSerializer.Serialize(new
         {
             revision = 0,
             settings = JsonSerializer.Deserialize<JsonElement>(SettingsJson("http://insecure.example")),
         })));
 
-        var publish = await ReadJsonAsync(await client.PostAsync("/v1/channels/bank-a/revisions/2/publish", null));
+        var publish = await ReadJsonAsync(await client.PostAsync("/v1/outbound-channels/bank-a/revisions/2/publish", null));
 
         await Assert.That(publish.GetProperty("succeeded").GetBoolean()).IsFalse();
         await Assert.That(publish.GetProperty("problems").GetArrayLength()).IsGreaterThanOrEqualTo(1);
 
-        var channelJson = await ReadJsonAsync(await client.GetAsync("/v1/channels/bank-a"));
+        var channelJson = await ReadJsonAsync(await client.GetAsync("/v1/outbound-channels/bank-a"));
         var active = channelJson.GetProperty("channel").GetProperty("revisions")
             .EnumerateArray()
             .Single(revision => revision.GetProperty("status").GetString() == "Active");
@@ -155,6 +155,8 @@ public class ManagementApiTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var client = ManagementApi.CreateClient(factory);
+
+        await client.PostAsync("/v1/outbound-channels", CreateChannelBody("bank-a"));
 
         var registered = await ReadJsonAsync(await client.PutAsync(
             "/v1/products/dpv/route",
@@ -181,6 +183,8 @@ public class ManagementApiTests
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var client = ManagementApi.CreateClient(factory);
 
+        await client.PostAsync("/v1/outbound-channels", CreateChannelBody("bank-a"));
+
         var registered = await ReadJsonAsync(await client.PutAsync(
             "/v1/products/dpv/route",
             Body(JsonSerializer.Serialize(new
@@ -203,6 +207,8 @@ public class ManagementApiTests
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var client = ManagementApi.CreateClient(factory);
 
+        await client.PostAsync("/v1/outbound-channels", CreateChannelBody("bank-a"));
+
         await client.PutAsync(
             "/v1/products/dpv/route",
             Body(JsonSerializer.Serialize(new
@@ -211,8 +217,8 @@ public class ManagementApiTests
                 allowedChannels = new[] { "bank-a" },
             })));
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         var rejected = await grpc.RegisterProductRouteAsync(
             new RegisterProductRouteRequest
@@ -286,10 +292,10 @@ public class ManagementApiTests
     public async Task Empty_channel_name_is_rejected_with_error_problem()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
-        var response = await grpc.CreateChannelAsync(
+        var response = await grpc.CreateOutboundChannelAsync(
             new CreateChannelRequest { Settings = AuthSettings("none", null) },
             ManagementApi.Call());
 
@@ -304,10 +310,10 @@ public class ManagementApiTests
     public async Task Publishing_channel_without_secret_returns_warning()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
-        var created = await grpc.CreateChannelAsync(
+        var created = await grpc.CreateOutboundChannelAsync(
             new CreateChannelRequest
             {
                 Name = "bank-a",
@@ -315,7 +321,7 @@ public class ManagementApiTests
             },
             ManagementApi.Call());
 
-        var published = await grpc.PublishChannelRevisionAsync(
+        var published = await grpc.PublishOutboundChannelRevisionAsync(
             new PublishChannelRevisionRequest { ChannelName = "bank-a", Revision = created.Revision },
             ManagementApi.Call());
 

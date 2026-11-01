@@ -10,7 +10,7 @@ internal static class ChannelRevisionWriter
         var revision = new ChannelRevision
         {
             Id = Guid.NewGuid(),
-            ChannelId = channelId,
+            OutboundChannelId = channelId,
             Number = number,
             Status = ChannelRevisionStatus.Draft,
             BaseUrl = configuration.BaseUrl,

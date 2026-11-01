@@ -144,6 +144,18 @@ public class OutboundDispatchTests
 
         using (var db = fixture.CreateDb())
         {
+            db.OutboundChannels.Add(new OutboundChannel
+            {
+                Id = Guid.NewGuid(),
+                Name = "bank-b",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        using (var db = fixture.CreateDb())
+        {
             await new LtiIntegrationGateway.Features.ProductRoutes.RegisterProductRouteHandler(db)
                 .HandleAsync(new LtiIntegrationGateway.Features.ProductRoutes.RegisterProductRouteCommand(
                     OutboundFixture.ProductId,

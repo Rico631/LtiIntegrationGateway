@@ -15,6 +15,8 @@ using LtiIntegrationGateway.Features.Contracts.PublishContractVersion;
 using LtiIntegrationGateway.Features.Contracts.UpdateContractOperationSettings;
 using LtiIntegrationGateway.Features.Contracts.UpdateContractVersionSettings;
 using LtiIntegrationGateway.Features.Contracts.UploadContractVersion;
+using LtiIntegrationGateway.Features.InboundChannels.CreateInboundChannel;
+using LtiIntegrationGateway.Features.InboundChannels.UpdateInboundChannelSettings;
 using LtiIntegrationGateway.Features.ProductRoutes;
 using LtiIntegrationGateway.Features.ProductRoutes.GetProductRoute;
 using LtiIntegrationGateway.Infrastructure.Management;
@@ -46,14 +48,16 @@ public sealed partial class ManagementApiService(
     GetContractVersionHandler getContractVersion,
     UpdateContractVersionSettingsHandler updateContractVersionSettings,
     UpdateContractOperationSettingsHandler updateContractOperationSettings,
+    CreateInboundChannelHandler createInboundChannel,
+    UpdateInboundChannelSettingsHandler updateInboundChannelSettings,
     ManagementAuditWriter audit) : ManagementService.ManagementServiceBase
 {
 
-    public override async Task<ListChannelsResponse> ListChannels(
+    public override async Task<ListChannelsResponse> ListOutboundChannels(
         ListChannelsRequest request,
         ServerCallContext context)
     {
-        var channels = await db.Channels
+        var channels = await db.OutboundChannels
             .AsNoTracking()
             .Include(channel => channel.Revisions)
             .OrderBy(channel => channel.Name)
@@ -71,7 +75,7 @@ public sealed partial class ManagementApiService(
         return response;
     }
 
-    public override async Task<GetChannelResponse> GetChannel(
+    public override async Task<GetChannelResponse> GetOutboundChannel(
         GetChannelRequest request,
         ServerCallContext context)
     {
@@ -90,7 +94,7 @@ public sealed partial class ManagementApiService(
         return new GetChannelResponse { Channel = ChannelMapping.ToInfo(result.Channel) };
     }
 
-    private static ChannelDetails ToDetails(Channel channel)
+    private static ChannelDetails ToDetails(OutboundChannel channel)
     {
         var active = channel.Revisions.SingleOrDefault(revision => revision.Status == ChannelRevisionStatus.Active);
 
@@ -109,7 +113,7 @@ public sealed partial class ManagementApiService(
         string channelName,
         CancellationToken cancellationToken)
     {
-        var channelId = await db.Channels
+        var channelId = await db.OutboundChannels
             .Where(channel => channel.Name == channelName)
             .Select(channel => (Guid?)channel.Id)
             .SingleOrDefaultAsync(cancellationToken);

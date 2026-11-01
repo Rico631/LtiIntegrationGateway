@@ -51,23 +51,11 @@ public static class ContractOperations
         return builder.ToString();
     }
 
-    public static async Task CreateChannelAsync(HttpClient client, string name = ChannelName)
+    public static async Task CreateOutboundChannelAsync(HttpClient client, string name = ChannelName)
     {
-        var response = await client.PostAsync("/v1/channels", ManagementApi.Json(JsonSerializer.Serialize(new
-        {
-            name,
-            settings = new
-            {
-                baseUrl = "https://" + name + ".example",
-                authType = "none",
-                perAttemptTimeoutMs = 5000,
-                overallCapMs = 30000,
-                retryPolicy = new[]
-                {
-                    new { match = "transport_error", statusCodes = Array.Empty<int>(), delaysMs = new[] { 100 } },
-                },
-            },
-        })));
+        // Контрактные сценарии начинают с пустого входящего канала: первая версия загружается
+        // обычным management-вызовом. Это отделяет проверку реестра контрактов от CreateInboundChannel.
+        var response = await client.PostAsync($"/test/inbound-channels?name={Uri.EscapeDataString(name)}", content: null);
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
     }
@@ -77,7 +65,7 @@ public static class ContractOperations
         string document,
         string channelName = ChannelName)
     {
-        var upload = await client.UploadContractAsync(
+        var upload = await client.UploadInboundContractVersionAsync(
             new UploadContractRequest { ChannelName = channelName, Document = document },
             ManagementApi.Call());
 
@@ -92,7 +80,7 @@ public static class ContractOperations
         string queue = VersionQueue,
         string channelName = ChannelName)
     {
-        var update = await client.UpdateContractVersionSettingsAsync(
+        var update = await client.UpdateInboundContractVersionSettingsAsync(
             new UpdateContractVersionSettingsRequest
             {
                 ChannelName = channelName,
@@ -108,7 +96,7 @@ public static class ContractOperations
         ManagementService.ManagementServiceClient client,
         int version,
         string channelName = ChannelName) =>
-        await client.PublishContractVersionAsync(
+        await client.PublishInboundContractVersionAsync(
             new PublishContractVersionRequest { ChannelName = channelName, Version = version },
             ManagementApi.Call());
 
@@ -116,7 +104,7 @@ public static class ContractOperations
         ManagementService.ManagementServiceClient client,
         int version,
         string channelName = ChannelName) =>
-        await client.ActivateContractVersionAsync(
+        await client.ActivateInboundContractVersionAsync(
             new ActivateContractVersionRequest { ChannelName = channelName, Version = version },
             ManagementApi.Call());
 
@@ -146,14 +134,14 @@ public static class ContractOperations
             request.RecipientQueue = recipientQueue;
         }
 
-        return await client.UpdateContractOperationSettingsAsync(request, ManagementApi.Call());
+        return await client.UpdateInboundContractOperationSettingsAsync(request, ManagementApi.Call());
     }
 
     public static async Task<ListContractOperationsResponse> ReadOperationsAsync(
         ManagementService.ManagementServiceClient client,
         int version,
         string channelName = ChannelName) =>
-        await client.ListContractOperationsAsync(
+        await client.ListInboundContractOperationsAsync(
             new ListContractOperationsRequest { ChannelName = channelName, Version = version },
             ManagementApi.Call());
 

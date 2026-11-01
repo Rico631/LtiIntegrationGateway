@@ -19,5 +19,7 @@ public sealed record InboundRouteMetadata(
     string? HeaderName,
     string? UserName,
     int? RateLimitPermit,
-    int? RateLimitWindowSeconds);
+    int? RateLimitWindowSeconds,
+    InboundResponseMode ResponseMode = InboundResponseMode.Async,
+    int InboundResponseTimeoutMs = 30_000);
 

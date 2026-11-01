@@ -23,9 +23,9 @@ public sealed class LoadActiveChannelHandler(GatewayDbContext db)
     {
         var revision = await db.ChannelRevisions
             .AsNoTracking()
-            .Include(entity => entity.Channel)
+            .Include(entity => entity.OutboundChannel)
             .SingleOrDefaultAsync(
-                entity => entity.Channel!.Name == channelName &&
+                entity => entity.OutboundChannel!.Name == channelName &&
                           entity.Status == ChannelRevisionStatus.Active,
                 cancellationToken);
 

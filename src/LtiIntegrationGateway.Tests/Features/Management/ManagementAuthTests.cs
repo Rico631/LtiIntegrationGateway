@@ -15,7 +15,7 @@ public class ManagementAuthTests
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var client = ManagementApi.CreateClient(factory, apiKey: null);
 
-        var response = await client.GetAsync("/v1/channels");
+        var response = await client.GetAsync("/v1/outbound-channels");
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.Unauthorized);
         await Assert.That(await response.Content.ReadAsStringAsync()).IsEmpty();
@@ -27,7 +27,7 @@ public class ManagementAuthTests
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var client = ManagementApi.CreateClient(factory, apiKey: "wrong-key");
 
-        var response = await client.GetAsync("/v1/channels");
+        var response = await client.GetAsync("/v1/outbound-channels");
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.Unauthorized);
     }
@@ -38,7 +38,7 @@ public class ManagementAuthTests
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings(apiKey: null));
         using var client = ManagementApi.CreateClient(factory);
 
-        var response = await client.GetAsync("/v1/channels");
+        var response = await client.GetAsync("/v1/outbound-channels");
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.ServiceUnavailable);
     }
@@ -49,7 +49,7 @@ public class ManagementAuthTests
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var client = ManagementApi.CreateClient(factory);
 
-        var response = await client.GetAsync("/v1/channels");
+        var response = await client.GetAsync("/v1/outbound-channels");
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
     }
@@ -58,11 +58,11 @@ public class ManagementAuthTests
     public async Task Grpc_call_without_key_is_unauthenticated()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var client = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var client = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         var exception = await Assert.ThrowsAsync<RpcException>(async () =>
-            await client.ListChannelsAsync(new ListChannelsRequest(), ManagementApi.Call(apiKey: null)));
+            await client.ListOutboundChannelsAsync(new ListChannelsRequest(), ManagementApi.Call(apiKey: null)));
 
         await Assert.That(exception!.StatusCode).IsEqualTo(StatusCode.Unauthenticated);
     }
@@ -84,7 +84,7 @@ public class ManagementAuthTests
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var client = ManagementApi.CreateClient(factory);
 
-        await client.GetAsync("/v1/channels");
+        await client.GetAsync("/v1/outbound-channels");
 
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
@@ -101,7 +101,7 @@ public class ManagementAuthTests
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var client = ManagementApi.CreateClient(factory, apiKey: null);
 
-        var response = await client.GetAsync("/v1/channels/bank-a/health");
+        var response = await client.GetAsync("/v1/outbound-channels/bank-a/health");
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.Unauthorized);
         await Assert.That(await response.Content.ReadAsStringAsync()).IsEmpty();
@@ -113,7 +113,7 @@ public class ManagementAuthTests
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings(apiKey: null));
         using var client = ManagementApi.CreateClient(factory);
 
-        var response = await client.GetAsync("/v1/channels/bank-a/health");
+        var response = await client.GetAsync("/v1/outbound-channels/bank-a/health");
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.ServiceUnavailable);
     }

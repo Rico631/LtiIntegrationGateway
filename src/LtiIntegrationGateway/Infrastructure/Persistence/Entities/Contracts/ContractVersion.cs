@@ -34,11 +34,11 @@ public sealed class ContractVersion : IEntity
     /// <summary>Уникальный идентификатор записи.</summary>
     public Guid Id { get; set; }
 
-    /// <summary>Идентификатор канала.</summary>
-    public Guid ChannelId { get; set; }
+    /// <summary>Идентификатор входящего канала.</summary>
+    public Guid InboundChannelId { get; set; }
 
-    /// <summary>Навигационное свойство канала.</summary>
-    public Channel? Channel { get; set; }
+    /// <summary>Навигационное свойство входящего канала.</summary>
+    public InboundChannel? InboundChannel { get; set; }
 
     /// <summary>Номер версии внутри канала, начиная с 1.</summary>
     public int Version { get; set; }

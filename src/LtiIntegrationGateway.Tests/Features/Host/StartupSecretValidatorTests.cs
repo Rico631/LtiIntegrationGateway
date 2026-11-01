@@ -82,13 +82,13 @@ public class StartupSecretValidatorTests
 
         await using (var context = database.CreateContext())
         {
-            var channel = new Channel { Id = Guid.NewGuid(), Name = "bank-a", CreatedAt = DateTimeOffset.UtcNow };
+            var inboundChannel = new InboundChannel { Id = Guid.NewGuid(), Name = "bank-a", CreatedAt = DateTimeOffset.UtcNow };
 
-            context.Channels.Add(channel);
+            context.InboundChannels.Add(inboundChannel);
             context.ContractVersions.Add(new ContractVersion
             {
                 Id = Guid.NewGuid(),
-                ChannelId = channel.Id,
+                InboundChannelId = inboundChannel.Id,
                 Version = 1,
                 SourceFormat = ContractSourceFormat.OpenApi30,
                 Document = "{}",
@@ -121,13 +121,13 @@ public class StartupSecretValidatorTests
     {
         await using var context = database.CreateContext();
 
-        var channel = new Channel { Id = Guid.NewGuid(), Name = name, CreatedAt = DateTimeOffset.UtcNow };
+        var OutboundChannel = new OutboundChannel { Id = Guid.NewGuid(), Name = name, CreatedAt = DateTimeOffset.UtcNow };
 
-        context.Channels.Add(channel);
+        context.OutboundChannels.Add(OutboundChannel);
         context.ChannelRevisions.Add(new ChannelRevision
         {
             Id = Guid.NewGuid(),
-            ChannelId = channel.Id,
+            OutboundChannelId = OutboundChannel.Id,
             Number = 1,
             Status = status,
             BaseUrl = "https://bank-a.example",

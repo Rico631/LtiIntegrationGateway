@@ -19,7 +19,9 @@ public sealed record InboundRouteDefinition(
     string? UserName = null,
     int? RateLimitPermit = null,
     int? RateLimitWindowSeconds = null,
-    bool Enabled = true);
+    bool Enabled = true,
+    InboundResponseMode ResponseMode = InboundResponseMode.Async,
+    int InboundResponseTimeoutMs = 30_000);
 
 /// <summary>Набор маршрутов одной ревизии контракта; активируется и деактивируется целиком.</summary>
 public sealed record InboundRouteSet(string RevisionKey, IReadOnlyList<InboundRouteDefinition> Routes);

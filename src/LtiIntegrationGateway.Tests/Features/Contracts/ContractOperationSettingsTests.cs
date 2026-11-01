@@ -138,13 +138,13 @@ public class ContractOperationSettingsTests
 
         await using (var context = database.CreateContext())
         {
-            var channel = new Channel { Id = Guid.NewGuid(), Name = "bank-a", CreatedAt = DateTimeOffset.UtcNow };
+            var inboundChannel = new InboundChannel { Id = Guid.NewGuid(), Name = "bank-a", CreatedAt = DateTimeOffset.UtcNow };
 
-            context.Channels.Add(channel);
+            context.InboundChannels.Add(inboundChannel);
             context.ContractVersions.Add(new ContractVersion
             {
                 Id = versionId,
-                ChannelId = channel.Id,
+                InboundChannelId = inboundChannel.Id,
                 Version = 1,
                 SourceFormat = ContractSourceFormat.OpenApi30,
                 Document = "{}",

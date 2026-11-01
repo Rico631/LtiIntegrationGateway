@@ -157,4 +157,38 @@ message InboundMessage {
 
   // Идентификатор связанного процесса, если определён достоверно.
   optional string correlation_id = 12;
+
+  // Признак ожидания ответа: true для синхронного inbound-канала, иначе false.
+  // Продукт обязан отправить InboundResponse только при значении true.
+  bool reply_expected = 13;
+}
+
+// Заголовок HTTP-ответа продукта для синхронного входящего вызова.
+message InboundResponseHeader {
+  // Имя разрешённого заголовка ответа.
+  string name = 1;
+
+  // Значение заголовка; CR/LF и недопустимые имена отклоняются шлюзом.
+  string value = 2;
+}
+
+// Ответ продукта на синхронный входящий вызов.
+message InboundResponse {
+  // Идентификатор исходного InboundMessage; обязан совпадать с ним.
+  string message_id = 1;
+
+  // HTTP-статус ответа: только 200..299 или 400..599.
+  int32 http_status_code = 2;
+
+  // Тип тела ответа; обязателен при непустом body.
+  optional string content_type = 3;
+
+  // Тело ответа в исходном виде; в ProtoJSON кодируется как base64.
+  bytes body = 4;
+
+  // Разрешённые заголовки ответа; порядок и повторы сохраняются.
+  repeated InboundResponseHeader headers = 5;
+
+  // Безопасный код ошибки для журнала и аудита; не подменяет HTTP-статус.
+  optional string error_code = 6;
 }

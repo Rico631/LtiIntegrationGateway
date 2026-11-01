@@ -170,12 +170,11 @@ public sealed class GetChannelHealthHandler(
         return (secrets.Find(configuration.ConfigKey) is not null, configKey, null, null);
     }
 
-    /// <summary>Читает не более пяти последних ошибок каждого направления, от новых к старым.</summary>
+    /// <summary>Читает не более пяти последних ошибок outbound-направления, от новых к старым.</summary>
     private async Task<IReadOnlyList<ChannelHealthErrorEntry>> ReadRecentErrorsAsync(
         string channelName,
         CancellationToken cancellationToken)
     {
-
         var outbound = await db.OutboundMessageLogs
             .AsNoTracking()
             .Where(log => log.ChannelName == channelName && log.ErrorCode != null)
@@ -190,18 +189,6 @@ public sealed class GetChannelHealthHandler(
             .Take(ErrorWindow)
             .ToListAsync(cancellationToken);
 
-        var inbound = await db.InboundMessageLogs
-            .AsNoTracking()
-            .Where(log => log.ChannelName == channelName && log.ErrorCode != null)
-            .OrderByDescending(log => log.ReceivedAt)
-            .Select(log => new
-            {
-                log.ErrorCode,
-                log.ReceivedAt,
-            })
-            .Take(ErrorWindow)
-            .ToListAsync(cancellationToken);
-
         return outbound
             .Select(log => new ChannelHealthErrorEntry(
                 log.CreatedAt,
@@ -211,16 +198,6 @@ public sealed class GetChannelHealthHandler(
                 log.Outcome ?? string.Empty))
             .OrderByDescending(entry => entry.OccurredAt)
             .Take(MaxErrorsPerDirection)
-            .Concat(inbound
-                .Select(log => new ChannelHealthErrorEntry(
-                    log.ReceivedAt,
-                    InboundDirection,
-                    log.ErrorCode!,
-                    0,
-                    string.Empty))
-                .OrderByDescending(entry => entry.OccurredAt)
-                .Take(MaxErrorsPerDirection))
-            .OrderByDescending(entry => entry.OccurredAt)
             .ToArray();
     }
 

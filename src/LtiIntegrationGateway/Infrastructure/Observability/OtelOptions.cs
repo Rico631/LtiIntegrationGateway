@@ -22,7 +22,7 @@ public sealed class OtelOptions
     public double SamplingRatio { get; set; } = 1.0;
 
     /// <summary>Интервал экспорта метрик в секундах от 1 до 3600.</summary>
-    public int ExportIntervalSeconds { get; set; } = 2;
+    public int ExportIntervalSeconds { get; set; } = 60;
 
     /// <summary>
     /// Проверяет параметры при включённой телеметрии. Сообщение содержит только имя

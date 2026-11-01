@@ -1,6 +1,7 @@
 using LtiIntegrationGateway.Infrastructure.Management;
 using LtiIntegrationGateway.Infrastructure.OpenApi;
 using LtiIntegrationGateway.Infrastructure.Persistence;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts;
 using LtiIntegrationGateway.Infrastructure.Routing;
 using Microsoft.EntityFrameworkCore;
@@ -29,10 +30,10 @@ public sealed class ActivateContractVersionHandler(
         var target = $"{command.ChannelName}:v{command.Version}";
 
         var version = await db.ContractVersions
-            .Include(entity => entity.Channel)
+            .Include(entity => entity.InboundChannel)
             .Include(entity => entity.Operations)
             .SingleOrDefaultAsync(
-                entity => entity.Channel!.Name == command.ChannelName && entity.Version == command.Version,
+                entity => entity.InboundChannel!.Name == command.ChannelName && entity.Version == command.Version,
                 cancellationToken);
 
         if (version is null)
@@ -49,12 +50,15 @@ public sealed class ActivateContractVersionHandler(
             return new ActivateContractVersionResult(version.Version, ["version: версия не опубликована"]);
         }
 
-        var channelName = version.Channel!.Name;
+        var channelName = version.InboundChannel!.Name;
+        var responseMode = version.InboundChannel.ResponseMode;
+        var responseTimeoutMs = version.InboundChannel.InboundResponseTimeoutMs;
 
         var previous = await db.ContractVersions
+            .Include(entity => entity.InboundChannel)
             .Include(entity => entity.Operations)
             .SingleOrDefaultAsync(
-                entity => entity.ChannelId == version.ChannelId &&
+                entity => entity.InboundChannelId == version.InboundChannelId &&
                           entity.Status == ContractVersionStatus.Active &&
                           entity.Id != version.Id,
                 cancellationToken);
@@ -71,7 +75,9 @@ public sealed class ActivateContractVersionHandler(
             channelName,
             version.Operations,
             ContractVersionSettings.From(version),
-            rateLimitOptions.Value);
+            rateLimitOptions.Value,
+            responseMode,
+            responseTimeoutMs);
 
         var activation = catalog.Activate(candidate);
 
@@ -129,7 +135,9 @@ public sealed class ActivateContractVersionHandler(
                 channelName,
                 previous.Operations,
                 ContractVersionSettings.From(previous),
-                rateLimitOptions.Value));
+                rateLimitOptions.Value,
+                previous.InboundChannel?.ResponseMode ?? InboundResponseMode.Async,
+                previous.InboundChannel?.InboundResponseTimeoutMs ?? 30_000));
         }
     }
 

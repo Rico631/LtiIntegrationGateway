@@ -84,8 +84,8 @@ public sealed class UpdateChannelDraftHandler(GatewayDbContext db)
 /// <summary>Общие запросы чтения канала вместе с настройками ревизий.</summary>
 internal static class ChannelQueries
 {
-    public static IQueryable<Channel> WithRevisions(GatewayDbContext db) =>
-        db.Channels
+    public static IQueryable<OutboundChannel> WithRevisions(GatewayDbContext db) =>
+        db.OutboundChannels
             .Include(channel => channel.Revisions)
             .AsSplitQuery();
 }

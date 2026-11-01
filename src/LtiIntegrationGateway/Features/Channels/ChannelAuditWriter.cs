@@ -11,12 +11,14 @@ internal static class ChannelAuditWriter
         Guid channelId,
         int? revisionNumber,
         string operation,
-        string? details = null)
+        string? details = null,
+        ChannelDirection direction = ChannelDirection.Outbound)
     {
         db.ChannelAuditEntries.Add(new ChannelAuditEntry
         {
             Id = Guid.NewGuid(),
             ChannelId = channelId,
+            Direction = direction,
             RevisionNumber = revisionNumber,
             Operation = operation,
             OccurredAt = DateTimeOffset.UtcNow,

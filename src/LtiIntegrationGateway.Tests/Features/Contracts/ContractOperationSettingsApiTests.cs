@@ -19,12 +19,12 @@ public class ContractOperationSettingsApiTests
 
     private static async Task<ManagementService.ManagementServiceClient> PreparePublishedAsync(
         GatewayWebApplicationFactory factory,
-        GrpcChannel channel)
+        GrpcChannel OutboundChannel)
     {
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http);
+        await CreateOutboundChannelAsync(http);
 
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         await UploadAsync(grpc, Document(("POST", "/callbacks/contracts", "receiveContract")));
         await SetVersionQueueAsync(grpc, 1);
@@ -37,8 +37,8 @@ public class ContractOperationSettingsApiTests
     public async Task Operation_settings_are_read_and_changed_via_grpc()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = await PreparePublishedAsync(factory, channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = await PreparePublishedAsync(factory, OutboundChannel);
 
         var before = await ReadOperationsAsync(grpc, 1);
 
@@ -61,7 +61,7 @@ public class ContractOperationSettingsApiTests
         await Assert.That(after.Operations[0].Enabled).IsFalse();
         await Assert.That(after.Operations[0].RecipientQueue).IsEqualTo(OperationQueue);
 
-        var version = await grpc.GetContractVersionAsync(
+        var version = await grpc.GetInboundContractVersionAsync(
             new GetContractVersionRequest { ChannelName = ChannelName, Version = 1 },
             ManagementApi.Call());
 
@@ -73,12 +73,12 @@ public class ContractOperationSettingsApiTests
     public async Task Operation_settings_are_changed_via_rest_patch()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = await PreparePublishedAsync(factory, channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = await PreparePublishedAsync(factory, OutboundChannel);
         using var http = ManagementApi.CreateClient(factory);
 
         var response = await http.PatchAsync(
-            $"/v1/channels/{ChannelName}/contracts/1/operations/receiveContract",
+            $"/v1/inbound-channels/{ChannelName}/contracts/1/operations/receiveContract",
             ManagementApi.Json(
                 $$"""
                 { "enabled": false, "recipientQueue": "{{OperationQueue}}" }
@@ -91,7 +91,7 @@ public class ContractOperationSettingsApiTests
             await Assert.That(document.RootElement.GetProperty("succeeded").GetBoolean()).IsTrue();
         }
 
-        var read = await http.GetAsync($"/v1/channels/{ChannelName}/contracts/1");
+        var read = await http.GetAsync($"/v1/inbound-channels/{ChannelName}/contracts/1");
 
         await Assert.That(read.StatusCode).IsEqualTo(HttpStatusCode.OK);
 
@@ -108,8 +108,8 @@ public class ContractOperationSettingsApiTests
     public async Task Partial_change_keeps_other_settings()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = await PreparePublishedAsync(factory, channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = await PreparePublishedAsync(factory, OutboundChannel);
 
         var first = await PatchAsync(
             grpc,
@@ -142,10 +142,10 @@ public class ContractOperationSettingsApiTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http);
+        await CreateOutboundChannelAsync(http);
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         await PublishAndActivateAsync(grpc, Document(("POST", "/callbacks/contracts", "receiveContract")), 1);
         await PublishAndActivateAsync(grpc, Document(("POST", "/callbacks/contracts", "receiveContract")), 2);
@@ -164,8 +164,8 @@ public class ContractOperationSettingsApiTests
     public async Task Unknown_version_and_operation_return_not_found()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = await PreparePublishedAsync(factory, channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = await PreparePublishedAsync(factory, OutboundChannel);
 
         var unknownVersion = await CaptureAsync(() => PatchAsync(grpc, 99, "receiveContract", enabled: false));
         var unknownOperation = await CaptureAsync(() => PatchAsync(grpc, 1, "missing", enabled: false));
@@ -176,7 +176,7 @@ public class ContractOperationSettingsApiTests
         using var http = ManagementApi.CreateClient(factory);
 
         var rest = await http.PatchAsync(
-            $"/v1/channels/{ChannelName}/contracts/1/operations/missing",
+            $"/v1/inbound-channels/{ChannelName}/contracts/1/operations/missing",
             ManagementApi.Json("""{ "enabled": false }"""));
 
         await Assert.That(rest.StatusCode).IsEqualTo(HttpStatusCode.NotFound);
@@ -187,10 +187,10 @@ public class ContractOperationSettingsApiTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http);
+        await CreateOutboundChannelAsync(http);
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         await UploadAsync(grpc, Document(("POST", "/callbacks/contracts", null)));
         await SetVersionQueueAsync(grpc, 1);
@@ -210,7 +210,7 @@ public class ContractOperationSettingsApiTests
         await Assert.That(grpcStatus).IsEqualTo(StatusCode.NotFound);
 
         var rest = await http.PatchAsync(
-            $"/v1/channels/{ChannelName}/contracts/1/operations/receiveContract",
+            $"/v1/inbound-channels/{ChannelName}/contracts/1/operations/receiveContract",
             ManagementApi.Json("""{ "enabled": false }"""));
 
         await Assert.That(rest.StatusCode).IsEqualTo(HttpStatusCode.NotFound);
@@ -220,10 +220,10 @@ public class ContractOperationSettingsApiTests
     public async Task Missing_fields_return_settings_problem()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = await PreparePublishedAsync(factory, channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = await PreparePublishedAsync(factory, OutboundChannel);
 
-        var empty = await grpc.UpdateContractOperationSettingsAsync(
+        var empty = await grpc.UpdateInboundContractOperationSettingsAsync(
             new UpdateContractOperationSettingsRequest
             {
                 ChannelName = ChannelName,
@@ -240,8 +240,8 @@ public class ContractOperationSettingsApiTests
     public async Task Invalid_operation_queue_is_rejected_and_settings_are_unchanged()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = await PreparePublishedAsync(factory, channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = await PreparePublishedAsync(factory, OutboundChannel);
 
         var rejected = await PatchAsync(grpc, 1, "receiveContract", recipientQueue: "inbound.queue");
 
@@ -265,8 +265,8 @@ public class ContractOperationSettingsApiTests
     public async Task Change_is_recorded_in_audit()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = await PreparePublishedAsync(factory, channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = await PreparePublishedAsync(factory, OutboundChannel);
 
         await PatchAsync(grpc, 1, "receiveContract", enabled: false);
         await CaptureAsync(() => PatchAsync(grpc, 1, "missing", enabled: false));
@@ -290,10 +290,10 @@ public class ContractOperationSettingsApiTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http);
+        await CreateOutboundChannelAsync(http);
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         // Операции извлекаются при публикации: у черновика их ещё нет.
         await UploadAsync(grpc, Document(("POST", "/callbacks/contracts", "receiveContract")));

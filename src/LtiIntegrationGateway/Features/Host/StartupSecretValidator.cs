@@ -30,7 +30,7 @@ public sealed class StartupSecretValidator(
                 revision.AuthType != ChannelAuthType.None)
             .Select(revision => new
             {
-                revision.Channel!.Name,
+                revision.OutboundChannel!.Name,
                 revision.AuthType,
                 revision.ConfigKey,
             })
@@ -50,7 +50,7 @@ public sealed class StartupSecretValidator(
                 version.AuthType != ChannelAuthType.None)
             .Select(version => new
             {
-                version.Channel!.Name,
+                version.InboundChannel!.Name,
                 version.Version,
                 version.AuthType,
                 version.ConfigKey,

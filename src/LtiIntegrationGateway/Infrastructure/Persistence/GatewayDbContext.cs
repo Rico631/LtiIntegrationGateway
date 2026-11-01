@@ -43,7 +43,9 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
         value => value.ToUnixTimeMilliseconds(),
         value => DateTimeOffset.FromUnixTimeMilliseconds(value));
 
-    public DbSet<Channel> Channels => Set<Channel>();
+    public DbSet<OutboundChannel> OutboundChannels => Set<OutboundChannel>();
+
+    public DbSet<InboundChannel> InboundChannels => Set<InboundChannel>();
 
     public DbSet<ChannelRevision> ChannelRevisions => Set<ChannelRevision>();
 
@@ -69,7 +71,7 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<Channel>(channel =>
+        modelBuilder.Entity<OutboundChannel>(channel =>
         {
             channel.HasKey(entity => entity.Id);
             channel.Property(entity => entity.Name).HasMaxLength(64).IsRequired();
@@ -77,9 +79,17 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
 
             channel
                 .HasMany(entity => entity.Revisions)
-                .WithOne(revision => revision.Channel)
-                .HasForeignKey(revision => revision.ChannelId)
+                .WithOne(revision => revision.OutboundChannel)
+                .HasForeignKey(revision => revision.OutboundChannelId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<InboundChannel>(channel =>
+        {
+            channel.HasKey(entity => entity.Id);
+            channel.Property(entity => entity.Name).HasMaxLength(64).IsRequired();
+            channel.HasIndex(entity => entity.Name).IsUnique();
+            channel.Property(entity => entity.ResponseMode).HasConversion<string>().HasMaxLength(16);
         });
 
         modelBuilder.Entity<ChannelRevision>(revision =>
@@ -99,16 +109,17 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
 
             retryPolicy.Metadata.SetValueComparer(RetryPolicyComparer);
 
-            revision.HasIndex(entity => new { entity.ChannelId, entity.Number }).IsUnique();
-            revision.HasIndex(entity => new { entity.ChannelId, entity.Status });
+            revision.HasIndex(entity => new { entity.OutboundChannelId, entity.Number }).IsUnique();
+            revision.HasIndex(entity => new { entity.OutboundChannelId, entity.Status });
         });
 
         modelBuilder.Entity<ChannelAuditEntry>(audit =>
         {
             audit.HasKey(entity => entity.Id);
             audit.Property(entity => entity.Operation).HasMaxLength(64).IsRequired();
+            audit.Property(entity => entity.Direction).HasConversion<string>().HasMaxLength(16);
             audit.Property(entity => entity.Details).HasMaxLength(2048);
-            audit.HasIndex(entity => new { entity.ChannelId, entity.OccurredAt });
+            audit.HasIndex(entity => new { entity.Direction, entity.ChannelId, entity.OccurredAt });
         });
 
         modelBuilder.Entity<ProductRoute>(route =>
@@ -193,9 +204,14 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
             version.Property(entity => entity.ConfigKey).HasMaxLength(256);
             version.Property(entity => entity.HeaderName).HasMaxLength(128);
             version.Property(entity => entity.UserName).HasMaxLength(128);
-            version.HasIndex(entity => new { entity.ChannelId, entity.Version }).IsUnique();
-            version.HasIndex(entity => new { entity.ChannelId, entity.Status });
+            version.HasIndex(entity => new { entity.InboundChannelId, entity.Version }).IsUnique();
+            version.HasIndex(entity => new { entity.InboundChannelId, entity.Status });
 
+            version
+                .HasOne(entity => entity.InboundChannel)
+                .WithMany(channel => channel.ContractVersions)
+                .HasForeignKey(entity => entity.InboundChannelId)
+                .OnDelete(DeleteBehavior.Cascade);
             version
                 .HasMany(entity => entity.Operations)
                 .WithOne(operation => operation.ContractVersion)
@@ -237,6 +253,8 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
             log.Property(entity => entity.QueryParameters).HasMaxLength(4096);
             log.Property(entity => entity.DeliveryStatus).HasConversion<string>().HasMaxLength(16);
             log.Property(entity => entity.ErrorCode).HasMaxLength(64);
+            log.Property(entity => entity.ResponseContentType).HasMaxLength(256);
+            log.Property(entity => entity.ResponseHeaders).HasMaxLength(8192);
             log.Property(entity => entity.ReceivedAt).HasConversion(UnixMillisecondsConverter);
             log.HasIndex(entity => entity.MessageId);
             // Индекс для выборки последних ошибок канала: здоровье канала читает журнал по каналу

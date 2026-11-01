@@ -2,57 +2,32 @@ using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Inbound;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Outbound;
 using LtiIntegrationGateway.Tests.TestSupport;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace LtiIntegrationGateway.Tests.Infrastructure.Persistence;
 
 public class GatewayDbContextTests
 {
     [Test]
-    public async Task Existing_timestamps_survive_removal_of_unix_columns()
+    public async Task Initial_migration_creates_direction_specific_channel_tables()
     {
         using var database = new SqliteInMemoryDatabase();
         using var context = database.CreateContext();
 
-        var migrator = context.Database.GetService<IMigrator>();
-
-        await migrator.MigrateAsync("20261031101548_AddOutboundErrorIndex");
-
-        var timestamp = new DateTimeOffset(2026, 10, 31, 10, 0, 0, TimeSpan.Zero);
-        var unixMilliseconds = timestamp.ToUnixTimeMilliseconds();
-
-        await context.Database.ExecuteSqlRawAsync(
-            "INSERT INTO OutboundMessageLogs " +
-            "(Id, MessageId, ProductId, ChannelName, DeliveryAddress, HttpMethod, RelativePath, " +
-            "RequestBody, ResponseBody, AttemptCount, DeliveryStatus, CreatedAt, CreatedAtUnixMs) " +
-            "VALUES ({0}, 'old-out', 'dpv', 'bank-a', 'dpv.inbox', 'GET', '/api', X'', X'', 0, " +
-            "'Sent', '2026-10-31 10:00:00+00:00', {1})",
-            Guid.NewGuid().ToString(),
-            unixMilliseconds);
-        await context.Database.ExecuteSqlRawAsync(
-            "INSERT INTO InboundMessageLogs " +
-            "(Id, MessageId, ChannelName, HttpMethod, RelativePath, RequestBody, DeliveryStatus, " +
-            "ReceivedAt, ReceivedAtUnixMs) " +
-            "VALUES ({0}, 'old-in', 'bank-a', 'POST', '/callbacks', X'', 'Sent', " +
-            "'2026-10-31 10:00:00+00:00', {1})",
-            Guid.NewGuid().ToString(),
-            unixMilliseconds);
-
         await context.Database.MigrateAsync();
 
-        await using var verify = database.CreateContext();
-        var outbound = await verify.OutboundMessageLogs.SingleAsync();
-        var inbound = await verify.InboundMessageLogs.SingleAsync();
+        var applied = await context.Database.GetAppliedMigrationsAsync();
+        var outboundChannels = await database.CountAsync(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'OutboundChannels'");
+        var inboundChannels = await database.CountAsync(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'InboundChannels'");
+        var sharedChannels = await database.CountAsync(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'Channels'");
 
-        await Assert.That(outbound.CreatedAt.ToUnixTimeMilliseconds()).IsEqualTo(unixMilliseconds);
-        await Assert.That(inbound.ReceivedAt.ToUnixTimeMilliseconds()).IsEqualTo(unixMilliseconds);
-
-        var allowedTables = await database.CountAsync(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' " +
-            "AND name IN ('ChannelAllowedMethods', 'ChannelAllowedPaths')");
-
-        await Assert.That(allowedTables).IsEqualTo(0);
+        await Assert.That(applied.Any(migration => migration.EndsWith("_InitialSchema", StringComparison.Ordinal)))
+            .IsTrue();
+        await Assert.That(outboundChannels).IsEqualTo(1);
+        await Assert.That(inboundChannels).IsEqualTo(1);
+        await Assert.That(sharedChannels).IsEqualTo(0);
     }
 
     [Test]

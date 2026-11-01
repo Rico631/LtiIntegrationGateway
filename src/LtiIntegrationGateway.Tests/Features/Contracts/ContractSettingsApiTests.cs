@@ -8,34 +8,23 @@ namespace LtiIntegrationGateway.Tests.Features.Contracts;
 
 public class ContractSettingsApiTests
 {
-    private static async Task CreateChannelAsync(HttpClient client, string name)
+    private static async Task CreateOutboundChannelAsync(HttpClient client, string name)
     {
-        var response = await client.PostAsync("/v1/channels", ManagementApi.Json($$"""
-        {
-          "name": "{{name}}",
-          "settings": {
-            "baseUrl": "https://{{name}}.example",
-            "authType": "none",
-            "perAttemptTimeoutMs": 5000,
-            "overallCapMs": 30000,
-            "retryPolicy": [ { "match": "transport_error", "statusCodes": [], "delaysMs": [100] } ]
-          }
-        }
-        """));
+        var response = await client.PostAsync($"/test/inbound-channels?name={Uri.EscapeDataString(name)}", content: null);
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
     }
 
     private static async Task<ManagementService.ManagementServiceClient> PrepareDraftAsync(
         GatewayWebApplicationFactory factory,
-        GrpcChannel channel)
+        GrpcChannel OutboundChannel)
     {
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http, "bank-a");
+        await CreateOutboundChannelAsync(http, "bank-a");
 
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
-        await grpc.UploadContractAsync(
+        await grpc.UploadInboundContractVersionAsync(
             new UploadContractRequest
             {
                 ChannelName = "bank-a",
@@ -50,10 +39,10 @@ public class ContractSettingsApiTests
     public async Task Draft_settings_are_saved_and_read_back()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = await PrepareDraftAsync(factory, channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = await PrepareDraftAsync(factory, OutboundChannel);
 
-        var update = await grpc.UpdateContractVersionSettingsAsync(
+        var update = await grpc.UpdateInboundContractVersionSettingsAsync(
             new UpdateContractVersionSettingsRequest
             {
                 ChannelName = "bank-a",
@@ -72,7 +61,7 @@ public class ContractSettingsApiTests
 
         await Assert.That(update.Succeeded).IsTrue();
 
-        var read = await grpc.GetContractVersionAsync(
+        var read = await grpc.GetInboundContractVersionAsync(
             new GetContractVersionRequest { ChannelName = "bank-a", Version = 1 },
             ManagementApi.Call());
 
@@ -92,10 +81,10 @@ public class ContractSettingsApiTests
     public async Task Published_version_settings_are_immutable()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = await PrepareDraftAsync(factory, channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = await PrepareDraftAsync(factory, OutboundChannel);
 
-        await grpc.UpdateContractVersionSettingsAsync(
+        await grpc.UpdateInboundContractVersionSettingsAsync(
             new UpdateContractVersionSettingsRequest
             {
                 ChannelName = "bank-a",
@@ -104,13 +93,13 @@ public class ContractSettingsApiTests
             },
             ManagementApi.Call());
 
-        var publish = await grpc.PublishContractVersionAsync(
+        var publish = await grpc.PublishInboundContractVersionAsync(
             new PublishContractVersionRequest { ChannelName = "bank-a", Version = 1 },
             ManagementApi.Call());
 
         await Assert.That(publish.Succeeded).IsTrue();
 
-        var update = await grpc.UpdateContractVersionSettingsAsync(
+        var update = await grpc.UpdateInboundContractVersionSettingsAsync(
             new UpdateContractVersionSettingsRequest
             {
                 ChannelName = "bank-a",
@@ -122,7 +111,7 @@ public class ContractSettingsApiTests
         await Assert.That(update.Succeeded).IsFalse();
         await Assert.That(update.Problems.Any(problem => problem.Code == "version")).IsTrue();
 
-        var read = await grpc.GetContractVersionAsync(
+        var read = await grpc.GetInboundContractVersionAsync(
             new GetContractVersionRequest { ChannelName = "bank-a", Version = 1 },
             ManagementApi.Call());
 
@@ -136,10 +125,10 @@ public class ContractSettingsApiTests
     public async Task Unsupported_auth_type_is_rejected()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = await PrepareDraftAsync(factory, channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = await PrepareDraftAsync(factory, OutboundChannel);
 
-        var bearer = await grpc.UpdateContractVersionSettingsAsync(
+        var bearer = await grpc.UpdateInboundContractVersionSettingsAsync(
             new UpdateContractVersionSettingsRequest
             {
                 ChannelName = "bank-a",
@@ -148,7 +137,7 @@ public class ContractSettingsApiTests
             },
             ManagementApi.Call());
 
-        var unknown = await grpc.UpdateContractVersionSettingsAsync(
+        var unknown = await grpc.UpdateInboundContractVersionSettingsAsync(
             new UpdateContractVersionSettingsRequest
             {
                 ChannelName = "bank-a",
@@ -165,10 +154,10 @@ public class ContractSettingsApiTests
     public async Task Inconsistent_secret_settings_are_rejected()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = await PrepareDraftAsync(factory, channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = await PrepareDraftAsync(factory, OutboundChannel);
 
-        var withoutConfigKey = await grpc.UpdateContractVersionSettingsAsync(
+        var withoutConfigKey = await grpc.UpdateInboundContractVersionSettingsAsync(
             new UpdateContractVersionSettingsRequest
             {
                 ChannelName = "bank-a",
@@ -177,7 +166,7 @@ public class ContractSettingsApiTests
             },
             ManagementApi.Call());
 
-        var basicWithoutUser = await grpc.UpdateContractVersionSettingsAsync(
+        var basicWithoutUser = await grpc.UpdateInboundContractVersionSettingsAsync(
             new UpdateContractVersionSettingsRequest
             {
                 ChannelName = "bank-a",
@@ -190,7 +179,7 @@ public class ContractSettingsApiTests
             },
             ManagementApi.Call());
 
-        var partialQuota = await grpc.UpdateContractVersionSettingsAsync(
+        var partialQuota = await grpc.UpdateInboundContractVersionSettingsAsync(
             new UpdateContractVersionSettingsRequest
             {
                 ChannelName = "bank-a",
@@ -208,14 +197,14 @@ public class ContractSettingsApiTests
     public async Task Unknown_version_returns_not_found()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = await PrepareDraftAsync(factory, channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = await PrepareDraftAsync(factory, OutboundChannel);
 
         RpcException? failure = null;
 
         try
         {
-            await grpc.GetContractVersionAsync(
+            await grpc.GetInboundContractVersionAsync(
                 new GetContractVersionRequest { ChannelName = "bank-a", Version = 99 },
                 ManagementApi.Call());
         }
@@ -232,10 +221,10 @@ public class ContractSettingsApiTests
     public async Task Publish_without_recipient_queue_is_rejected()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = await PrepareDraftAsync(factory, channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = await PrepareDraftAsync(factory, OutboundChannel);
 
-        var publish = await grpc.PublishContractVersionAsync(
+        var publish = await grpc.PublishInboundContractVersionAsync(
             new PublishContractVersionRequest { ChannelName = "bank-a", Version = 1 },
             ManagementApi.Call());
 

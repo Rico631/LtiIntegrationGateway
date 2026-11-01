@@ -32,18 +32,18 @@ public class GetChannelHealthTests
             timeProvider ?? new ManualTimeProvider(),
             NullLogger<GetChannelHealthHandler>.Instance);
 
-    private static Channel CreateChannel(
+    private static OutboundChannel CreateChannel(
         ChannelAuthType authType = ChannelAuthType.None,
         string? configKey = null,
         ChannelRevisionStatus status = ChannelRevisionStatus.Active,
         int number = 1)
     {
-        var channel = new Channel { Id = Guid.NewGuid(), Name = ChannelName, CreatedAt = FixedNow };
+        var OutboundChannel = new OutboundChannel { Id = Guid.NewGuid(), Name = ChannelName, CreatedAt = FixedNow };
 
-        channel.Revisions.Add(new ChannelRevision
+        OutboundChannel.Revisions.Add(new ChannelRevision
         {
             Id = Guid.NewGuid(),
-            ChannelId = channel.Id,
+            OutboundChannelId = OutboundChannel.Id,
             Number = number,
             Status = status,
             BaseUrl = "https://bank-a.example",
@@ -54,7 +54,7 @@ public class GetChannelHealthTests
             CreatedAt = FixedNow,
         });
 
-        return channel;
+        return OutboundChannel;
     }
 
     private static OutboundMessageLog OutboundError(
@@ -120,9 +120,8 @@ public class GetChannelHealthTests
         database.Migrate();
 
         using var db = database.CreateContext();
-        db.Channels.Add(CreateChannel(status: ChannelRevisionStatus.Draft));
+        db.OutboundChannels.Add(CreateChannel(status: ChannelRevisionStatus.Draft));
         db.OutboundMessageLogs.Add(OutboundError(FixedNow));
-        db.InboundMessageLogs.Add(InboundError(FixedNow.AddMinutes(-5)));
         await db.SaveChangesAsync();
 
         using var certificates = new TestChannelCertificateStore();
@@ -135,7 +134,7 @@ public class GetChannelHealthTests
         await Assert.That(result.Health.SecretConfigured).IsFalse();
         await Assert.That(result.Health.SecretConfigKey).IsEqualTo(string.Empty);
         await Assert.That(result.Health.CertificateExpiresAt).IsNull();
-        await Assert.That(result.Health.Errors.Count).IsEqualTo(2);
+        await Assert.That(result.Health.Errors.Count).IsEqualTo(1);
     }
 
     [Test]
@@ -145,7 +144,7 @@ public class GetChannelHealthTests
         database.Migrate();
 
         using var db = database.CreateContext();
-        db.Channels.Add(CreateChannel(authType: ChannelAuthType.None));
+        db.OutboundChannels.Add(CreateChannel(authType: ChannelAuthType.None));
         await db.SaveChangesAsync();
 
         using var certificates = new TestChannelCertificateStore();
@@ -165,7 +164,7 @@ public class GetChannelHealthTests
         database.Migrate();
 
         using var db = database.CreateContext();
-        db.Channels.Add(CreateChannel(ChannelAuthType.Bearer, ConfigKey));
+        db.OutboundChannels.Add(CreateChannel(ChannelAuthType.Bearer, ConfigKey));
         await db.SaveChangesAsync();
 
         using var certificates = new TestChannelCertificateStore();
@@ -183,7 +182,7 @@ public class GetChannelHealthTests
         database.Migrate();
 
         using var db = database.CreateContext();
-        db.Channels.Add(CreateChannel(ChannelAuthType.ApiKey, ConfigKey));
+        db.OutboundChannels.Add(CreateChannel(ChannelAuthType.ApiKey, ConfigKey));
         await db.SaveChangesAsync();
 
         using var certificates = new TestChannelCertificateStore();
@@ -202,7 +201,7 @@ public class GetChannelHealthTests
         database.Migrate();
 
         using var db = database.CreateContext();
-        db.Channels.Add(CreateChannel(ChannelAuthType.Basic, configKey: null));
+        db.OutboundChannels.Add(CreateChannel(ChannelAuthType.Basic, configKey: null));
         await db.SaveChangesAsync();
 
         using var certificates = new TestChannelCertificateStore();
@@ -227,7 +226,7 @@ public class GetChannelHealthTests
             .With(CertificateKey, material, TestCertificates.Password);
 
         using var db = database.CreateContext();
-        db.Channels.Add(CreateChannel(ChannelAuthType.ClientCertificate, CertificateKey));
+        db.OutboundChannels.Add(CreateChannel(ChannelAuthType.ClientCertificate, CertificateKey));
         await db.SaveChangesAsync();
 
         var result = await CreateHandler(db, new TestSecretStore(), certificates)
@@ -256,7 +255,7 @@ public class GetChannelHealthTests
             .With(CertificateKey, material, TestCertificates.Password);
 
         using var db = database.CreateContext();
-        db.Channels.Add(CreateChannel(ChannelAuthType.ClientCertificate, CertificateKey));
+        db.OutboundChannels.Add(CreateChannel(ChannelAuthType.ClientCertificate, CertificateKey));
         await db.SaveChangesAsync();
 
         var result = await CreateHandler(db, new TestSecretStore(), certificates)
@@ -283,7 +282,7 @@ public class GetChannelHealthTests
             .With(CertificateKey, material, TestCertificates.Password);
 
         using var db = database.CreateContext();
-        db.Channels.Add(CreateChannel(ChannelAuthType.ClientCertificate, CertificateKey));
+        db.OutboundChannels.Add(CreateChannel(ChannelAuthType.ClientCertificate, CertificateKey));
         await db.SaveChangesAsync();
 
         var result = await CreateHandler(db, new TestSecretStore(), certificates)
@@ -303,7 +302,7 @@ public class GetChannelHealthTests
         database.Migrate();
 
         using var db = database.CreateContext();
-        db.Channels.Add(CreateChannel());
+        db.OutboundChannels.Add(CreateChannel());
 
         for (var index = 0; index < 7; index++)
         {
@@ -326,16 +325,10 @@ public class GetChannelHealthTests
 
         var errors = result.Health!.Errors;
 
-        await Assert.That(errors.Count).IsEqualTo(7);
-        await Assert.That(errors.Count(entry => entry.Direction == GetChannelHealthHandler.OutboundDirection))
-            .IsEqualTo(GetChannelHealthHandler.MaxErrorsPerDirection);
-        await Assert.That(errors.Count(entry => entry.Direction == GetChannelHealthHandler.InboundDirection))
-            .IsEqualTo(2);
+        await Assert.That(errors.Count).IsEqualTo(GetChannelHealthHandler.MaxErrorsPerDirection);
+        await Assert.That(errors.All(entry => entry.Direction == GetChannelHealthHandler.OutboundDirection))
+            .IsTrue();
         await Assert.That(string.Join(",", errors.Select(entry => entry.ErrorCode)))
-            .IsEqualTo("OUT-0,OUT-1,IN-0,OUT-2,IN-1,OUT-3,OUT-4");
-        await Assert.That(errors.Any(entry => entry.Direction == GetChannelHealthHandler.InboundDirection &&
-            entry.HttpStatus != 0)).IsFalse();
-        await Assert.That(errors.Any(entry => entry.Direction == GetChannelHealthHandler.InboundDirection &&
-            entry.Outcome.Length != 0)).IsFalse();
+            .IsEqualTo("OUT-0,OUT-1,OUT-2,OUT-3,OUT-4");
     }
 }

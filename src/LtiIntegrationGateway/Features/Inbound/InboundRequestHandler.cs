@@ -6,6 +6,7 @@ using Google.Protobuf.WellKnownTypes;
 using LtiIntegrationGateway.Contracts.Messages.V1;
 using LtiIntegrationGateway.Infrastructure.Observability;
 using LtiIntegrationGateway.Infrastructure.OpenApi;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Inbound;
 using LtiIntegrationGateway.Infrastructure.Routing;
 
@@ -56,6 +57,10 @@ public sealed class InboundRequestHandler(
         GatewayTelemetry.SetTag(activity, GatewayTelemetry.HttpRouteTag, template);
         GatewayTelemetry.SetTag(activity, GatewayTelemetry.UrlPathTag, InboundRequestPath.Get(context));
         GatewayTelemetry.SetTag(activity, GatewayTelemetry.OperationIdTag, route.OperationId);
+        GatewayTelemetry.SetTag(
+            activity,
+            GatewayTelemetry.InboundResponseModeTag,
+            route.ResponseMode == InboundResponseMode.Sync ? "sync" : "async");
 
         try
         {
@@ -198,6 +203,8 @@ public sealed class InboundRequestHandler(
             return;
         }
 
+        var recipientQueue = route.RecipientQueue;
+
         var receivedAt = DateTimeOffset.UtcNow;
         var message = new InboundMessage
         {
@@ -209,6 +216,7 @@ public sealed class InboundRequestHandler(
             ContentType = contentType ?? string.Empty,
             Body = Google.Protobuf.ByteString.CopyFrom(body),
             ReceivedAt = Timestamp.FromDateTimeOffset(receivedAt),
+            ReplyExpected = route.ResponseMode == InboundResponseMode.Sync,
         };
 
         if (!string.IsNullOrWhiteSpace(route.OperationId))
@@ -220,7 +228,7 @@ public sealed class InboundRequestHandler(
 
         var entryId = await journal.AppendAsync(
             () => CreateEntry(message, route, template, body, queryParameters, InboundDeliveryStatus.Pending, null, receivedAt),
-            context.RequestAborted);
+            CancellationToken.None);
 
         if (entryId is null)
         {
@@ -231,9 +239,26 @@ public sealed class InboundRequestHandler(
             return;
         }
 
+        if (route.ResponseMode == InboundResponseMode.Async)
+        {
+            await PublishAsync(context, route, message, entryId.Value, template);
+
+            return;
+        }
+
+        await HandleSynchronousAsync(context, route, message, entryId.Value, template);
+    }
+
+    private async Task PublishAsync(
+        HttpContext context,
+        InboundRouteMetadata route,
+        InboundMessage message,
+        Guid entryId,
+        string template)
+    {
         try
         {
-            await publisher.PublishAsync(route.RecipientQueue, message, context.RequestAborted);
+            await publisher.PublishAsync(route.RecipientQueue!, message, context.RequestAborted);
 
             await journal.UpdateStatusAsync(entryId, InboundDeliveryStatus.Sent, null, CancellationToken.None);
 
@@ -252,6 +277,215 @@ public sealed class InboundRequestHandler(
             SetErrorCode(context, "delivery");
 
             await WriteStatusAsync(context, StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
+    /// <summary>
+    /// Ожидание ответа в синхронном режиме: ответ продукта проверяется fail-closed и
+    /// переносится в HTTP-ответ; клиентская отмена не превращается в ответ.
+    /// </summary>
+    private async Task HandleSynchronousAsync(
+        HttpContext context,
+        InboundRouteMetadata route,
+        InboundMessage message,
+        Guid entryId,
+        string template)
+    {
+        var timeout = TimeSpan.FromMilliseconds(Math.Max(1, route.InboundResponseTimeoutMs));
+
+        try
+        {
+            var response = await publisher.SendRequestAsync(
+                route.RecipientQueue!,
+                message,
+                timeout,
+                context.RequestAborted);
+
+            var problems = ValidateResponse(message.MessageId, response);
+
+            if (problems.Count > 0)
+            {
+                await journal.UpdateResponseAsync(
+                    entryId,
+                    InboundDeliveryStatus.Failed,
+                    response.HttpStatusCode is >= 200 and <= 599 ? response.HttpStatusCode : null,
+                    response.ContentType,
+                    response.Body.ToByteArray(),
+                    SerializeResponseHeaders(response),
+                    "invalid_inbound_response",
+                    CancellationToken.None);
+
+                SetErrorCode(context, "invalid_inbound_response");
+                logger.LogWarning(
+                    "Некорректный InboundResponse: канал {Channel}, маршрут {Template}, проблемы {Problems}",
+                    route.ChannelName,
+                    template,
+                    string.Join("; ", problems));
+
+                await WriteStatusAsync(context, StatusCodes.Status502BadGateway);
+
+                return;
+            }
+
+            await journal.UpdateResponseAsync(
+                entryId,
+                InboundDeliveryStatus.Replied,
+                response.HttpStatusCode,
+                string.IsNullOrWhiteSpace(response.ContentType) ? null : response.ContentType,
+                response.Body.ToByteArray(),
+                SerializeResponseHeaders(response),
+                string.IsNullOrWhiteSpace(response.ErrorCode) ? null : response.ErrorCode,
+                CancellationToken.None);
+
+            await WriteInboundResponseAsync(context, response);
+        }
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+            await journal.UpdateResponseAsync(
+                entryId,
+                InboundDeliveryStatus.Cancelled,
+                null,
+                null,
+                [],
+                null,
+                "cancelled",
+                CancellationToken.None);
+        }
+        catch (TimeoutException)
+        {
+            await HandleTimeoutAsync(context, route, entryId, template);
+        }
+        catch (OperationCanceledException)
+        {
+            await HandleTimeoutAsync(context, route, entryId, template);
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(
+                exception,
+                "Не удалось выполнить синхронный входящий вызов: канал {Channel}, маршрут {Template}",
+                route.ChannelName,
+                template);
+
+            await journal.UpdateResponseAsync(
+                entryId,
+                InboundDeliveryStatus.Failed,
+                null,
+                null,
+                [],
+                null,
+                "delivery",
+                CancellationToken.None);
+
+            SetErrorCode(context, "delivery");
+
+            await WriteStatusAsync(context, StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
+    private async Task HandleTimeoutAsync(
+        HttpContext context,
+        InboundRouteMetadata route,
+        Guid entryId,
+        string template)
+    {
+        logger.LogWarning(
+            "Истёк таймаут InboundResponse: канал {Channel}, маршрут {Template}, timeout {TimeoutMs} мс",
+            route.ChannelName,
+            template,
+            route.InboundResponseTimeoutMs);
+
+        await journal.UpdateResponseAsync(
+            entryId,
+            InboundDeliveryStatus.TimedOut,
+            null,
+            null,
+            [],
+            null,
+            "inbound_timeout",
+            CancellationToken.None);
+
+        SetErrorCode(context, "inbound_timeout");
+
+        await WriteStatusAsync(context, StatusCodes.Status504GatewayTimeout);
+    }
+
+    private static readonly HashSet<string> AllowedResponseHeaders = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Location",
+        "Retry-After",
+        "Cache-Control",
+        "ETag",
+        "Last-Modified",
+        "Vary",
+        "WWW-Authenticate",
+    };
+
+    private static IReadOnlyList<string> ValidateResponse(string messageId, InboundResponse response)
+    {
+        var problems = new List<string>();
+
+        if (!string.Equals(response.MessageId, messageId, StringComparison.Ordinal))
+        {
+            problems.Add("message_id: не совпадает с исходным сообщением");
+        }
+
+        if (response.HttpStatusCode is < 200 or > 299 &&
+            response.HttpStatusCode is < 400 or > 599)
+        {
+            problems.Add("http_status_code: допустимы только 200..299 или 400..599");
+        }
+
+        if (response.Body.Length > 0 && string.IsNullOrWhiteSpace(response.ContentType))
+        {
+            problems.Add("content_type: обязателен при непустом body");
+        }
+
+        if (!string.IsNullOrWhiteSpace(response.ContentType) &&
+            !MediaTypeHeaderValue.TryParse(response.ContentType, out _))
+        {
+            problems.Add("content_type: некорректный media type");
+        }
+
+        foreach (var header in response.Headers)
+        {
+            if (!AllowedResponseHeaders.Contains(header.Name))
+            {
+                problems.Add($"headers: заголовок '{header.Name}' не разрешён");
+            }
+
+            if (header.Name.Contains('\r') || header.Name.Contains('\n') ||
+                header.Value.Contains('\r') || header.Value.Contains('\n'))
+            {
+                problems.Add($"headers: недопустимые символы в заголовке '{header.Name}'");
+            }
+        }
+
+        return problems;
+    }
+
+    private static string? SerializeResponseHeaders(InboundResponse response) =>
+        response.Headers.Count == 0
+            ? null
+            : JsonSerializer.Serialize(response.Headers.Select(header => new { name = header.Name, value = header.Value }));
+
+    private static async Task WriteInboundResponseAsync(HttpContext context, InboundResponse response)
+    {
+        context.Response.StatusCode = response.HttpStatusCode;
+
+        if (!string.IsNullOrWhiteSpace(response.ContentType))
+        {
+            context.Response.ContentType = response.ContentType;
+        }
+
+        foreach (var header in response.Headers)
+        {
+            context.Response.Headers.Append(header.Name, header.Value);
+        }
+
+        if (response.Body.Length > 0)
+        {
+            await context.Response.Body.WriteAsync(response.Body.Memory, context.RequestAborted);
         }
     }
 

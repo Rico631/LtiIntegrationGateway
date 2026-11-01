@@ -103,6 +103,7 @@ public class IntegrationMessagesRoundTripTests
 
         message.QueryParameters.Add(new QueryParameter { Name = "source", Value = "bank" });
         message.QueryParameters.Add(new QueryParameter { Name = "source", Value = "mirror" });
+        message.ReplyExpected = true;
 
         var parsed = ContractJson.Parse<InboundMessage>(ContractJson.Serialize(message));
 
@@ -111,5 +112,32 @@ public class IntegrationMessagesRoundTripTests
         await Assert.That(parsed.ReceivedAt).IsEqualTo(receivedAt);
         await Assert.That(parsed.QueryParameters.Count).IsEqualTo(2);
         await Assert.That(parsed.QueryParameters[1].Value).IsEqualTo("mirror");
+        await Assert.That(parsed.ReplyExpected).IsTrue();
+    }
+
+    [Test]
+    public async Task Inbound_response_round_trips_optional_content_type_and_headers()
+    {
+        var response = new InboundResponse
+        {
+            MessageId = "f20f2b25-64b0-4ad2-8d0a-4f4bbfdd53d1",
+            HttpStatusCode = 201,
+            ContentType = "application/json",
+            Body = ByteString.CopyFromUtf8("{\"ok\":true}"),
+            ErrorCode = "product_ok",
+        };
+
+        response.Headers.Add(new InboundResponseHeader { Name = "Location", Value = "/result/1" });
+        response.Headers.Add(new InboundResponseHeader { Name = "Location", Value = "/result/2" });
+
+        var parsed = ContractJson.Parse<InboundResponse>(ContractJson.Serialize(response));
+
+        await Assert.That(parsed.MessageId).IsEqualTo(response.MessageId);
+        await Assert.That(parsed.HttpStatusCode).IsEqualTo(201);
+        await Assert.That(parsed.ContentType).IsEqualTo("application/json");
+        await Assert.That(parsed.Body.ToStringUtf8()).IsEqualTo("{\"ok\":true}");
+        await Assert.That(parsed.Headers.Count).IsEqualTo(2);
+        await Assert.That(parsed.Headers[1].Value).IsEqualTo("/result/2");
+        await Assert.That(parsed.ErrorCode).IsEqualTo("product_ok");
     }
 }

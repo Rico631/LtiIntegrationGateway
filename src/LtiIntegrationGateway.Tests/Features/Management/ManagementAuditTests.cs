@@ -24,12 +24,12 @@ public class ManagementAuditTests
         RetryPolicy = { new ProtoRetryRule { Match = "transport_error", DelaysMs = { 100 } } },
     };
 
-    private static async Task CreateChannelAsync(GatewayWebApplicationFactory factory)
+    private static async Task CreateOutboundChannelAsync(GatewayWebApplicationFactory factory)
     {
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
-        var response = await grpc.CreateChannelAsync(
+        var response = await grpc.CreateOutboundChannelAsync(
             new CreateChannelRequest { Name = ChannelName, Settings = Settings() },
             ManagementApi.Call());
 
@@ -48,10 +48,10 @@ public class ManagementAuditTests
     public async Task GetChannel_read_is_audited()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        await CreateChannelAsync(factory);
+        await CreateOutboundChannelAsync(factory);
 
         using var client = ManagementApi.CreateClient(factory);
-        var response = await client.GetAsync($"/v1/channels/{ChannelName}");
+        var response = await client.GetAsync($"/v1/outbound-channels/{ChannelName}");
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
 
@@ -69,11 +69,11 @@ public class ManagementAuditTests
 
         var cases = new (string Method, string Path, string? Body, string Operation)[]
         {
-            ("GET", "/v1/channels/missing", null, "GetChannel"),
-            ("PATCH", "/v1/channels/missing/draft", "{}", "UpdateChannelDraft"),
-            ("POST", "/v1/channels/missing/revisions/1/publish", null, "PublishChannelRevision"),
-            ("POST", "/v1/channels/missing/revisions/1/activate", null, "ActivateChannelRevision"),
-            ("POST", "/v1/channels/missing/rollback", null, "RollbackChannelRevision"),
+            ("GET", "/v1/outbound-channels/missing", null, "GetChannel"),
+            ("PATCH", "/v1/outbound-channels/missing/draft", "{}", "UpdateChannelDraft"),
+            ("POST", "/v1/outbound-channels/missing/revisions/1/publish", null, "PublishChannelRevision"),
+            ("POST", "/v1/outbound-channels/missing/revisions/1/activate", null, "ActivateChannelRevision"),
+            ("POST", "/v1/outbound-channels/missing/rollback", null, "RollbackChannelRevision"),
         };
 
         foreach (var item in cases)
@@ -100,11 +100,11 @@ public class ManagementAuditTests
     public async Task Unknown_channel_returns_not_found_over_grpc()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         var exception = await Assert.ThrowsAsync<RpcException>(async () =>
-            await grpc.GetChannelAsync(
+            await grpc.GetOutboundChannelAsync(
                 new GetChannelRequest { ChannelName = "missing" },
                 ManagementApi.Call()));
 
@@ -115,14 +115,14 @@ public class ManagementAuditTests
     public async Task Version_settings_validation_failures_are_audited()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
-        var missingSettings = await grpc.UpdateContractVersionSettingsAsync(
+        var missingSettings = await grpc.UpdateInboundContractVersionSettingsAsync(
             new UpdateContractVersionSettingsRequest { ChannelName = ChannelName, Version = 1 },
             ManagementApi.Call());
 
-        var unknownAuthType = await grpc.UpdateContractVersionSettingsAsync(
+        var unknownAuthType = await grpc.UpdateInboundContractVersionSettingsAsync(
             new UpdateContractVersionSettingsRequest
             {
                 ChannelName = ChannelName,
@@ -147,10 +147,10 @@ public class ManagementAuditTests
     public async Task Health_read_is_audited_once()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        await CreateChannelAsync(factory);
+        await CreateOutboundChannelAsync(factory);
 
         using var client = ManagementApi.CreateClient(factory);
-        var response = await client.GetAsync($"/v1/channels/{ChannelName}/health");
+        var response = await client.GetAsync($"/v1/outbound-channels/{ChannelName}/health");
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
 

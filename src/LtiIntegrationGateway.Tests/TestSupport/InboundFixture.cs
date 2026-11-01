@@ -29,6 +29,15 @@ public sealed class CollectingInboundHandler : IHandleMessages<InboundMessage>
 {
     private readonly List<InboundMessage> _messages = [];
 
+    /// <summary>Шина продукта, используемая для ответа в синхронном режиме.</summary>
+    public IBus? ReplyBus { get; set; }
+
+    /// <summary>Фабрика ответа; если задана и сообщение требует ответа, продукт отвечает.</summary>
+    public Func<InboundMessage, InboundResponse?>? ReplyFactory { get; set; }
+
+    /// <summary>Задержка ответа продукта; используется для проверки позднего ответа.</summary>
+    public TimeSpan ReplyDelay { get; set; }
+
     public IReadOnlyList<InboundMessage> Messages
     {
         get
@@ -40,14 +49,22 @@ public sealed class CollectingInboundHandler : IHandleMessages<InboundMessage>
         }
     }
 
-    public Task Handle(InboundMessage message)
+    public async Task Handle(InboundMessage message)
     {
         lock (_messages)
         {
             _messages.Add(message);
         }
 
-        return Task.CompletedTask;
+        if (message.ReplyExpected && ReplyBus is not null && ReplyFactory?.Invoke(message) is { } response)
+        {
+            if (ReplyDelay > TimeSpan.Zero)
+            {
+                await Task.Delay(ReplyDelay);
+            }
+
+            await ReplyBus.Reply(response);
+        }
     }
 
     public async Task<IReadOnlyList<InboundMessage>> WaitForCountAsync(int expected, TimeSpan timeout)
@@ -78,7 +95,21 @@ public sealed class FailingInboundMessagePublisher : IInboundMessagePublisher
         InboundMessage message,
         CancellationToken cancellationToken = default) =>
         throw new InvalidOperationException("шина недоступна");
+
+    public Task<InboundResponse> SendRequestAsync(
+        string recipientQueue,
+        InboundMessage message,
+        TimeSpan timeout,
+        CancellationToken cancellationToken = default) =>
+        throw new InvalidOperationException("шина недоступна");
 }
+
+/// <summary>Ответ тестового входящего вызова: статус, тело и заголовки.</summary>
+public sealed record InboundTestResponse(
+    int StatusCode,
+    string Body,
+    IReadOnlyDictionary<string, string[]> Headers);
+
 
 /// <summary>
 /// Тестовый контур приёма: SQLite в памяти, тестовое хранилище секретов и два in-memory endpoint'а
@@ -112,13 +143,17 @@ public sealed class InboundFixture : IAsyncDisposable
         _productBus = Configure.With(productActivator)
             .Transport(transport => transport.UseInMemoryTransport(_network, RecipientQueue))
             .Serialization(serialization => serialization.Register(_ => serializer))
+            .Options(options => options.EnableSynchronousRequestReply())
             .Start();
+
+        Received.ReplyBus = _productBus;
 
         var gatewayActivator = new BuiltinHandlerActivator();
 
         _gatewayBus = Configure.With(gatewayActivator)
             .Transport(transport => transport.UseInMemoryTransport(_network, "gateway.inbound"))
             .Serialization(serialization => serialization.Register(_ => serializer))
+            .Options(options => options.EnableSynchronousRequestReply())
             .Start();
 
         _services = BuildServices(new RebusInboundMessagePublisher(_gatewayBus));
@@ -183,7 +218,9 @@ public sealed class InboundFixture : IAsyncDisposable
         string? operationId = "receiveContract",
         Guid? versionId = null,
         int? rateLimitPermit = null,
-        int? rateLimitWindowSeconds = null) =>
+        int? rateLimitWindowSeconds = null,
+        InboundResponseMode responseMode = InboundResponseMode.Async,
+        int inboundResponseTimeoutMs = 30_000) =>
         new(
             ChannelName,
             versionId ?? ContractVersionId,
@@ -194,10 +231,12 @@ public sealed class InboundFixture : IAsyncDisposable
             headerName,
             userName,
             rateLimitPermit,
-            rateLimitWindowSeconds);
+            rateLimitWindowSeconds,
+            responseMode,
+            inboundResponseTimeoutMs);
 
     /// <summary>Выполняет входящий вызов так, как его получил бы динамический маршрут.</summary>
-    public async Task<int> InvokeAsync(
+    public async Task<InboundTestResponse> InvokeWithResponseAsync(
         InboundRouteMetadata route,
         string method = "POST",
         string path = "/callbacks/contracts",
@@ -206,12 +245,14 @@ public sealed class InboundFixture : IAsyncDisposable
         string? contentType = "application/json",
         IReadOnlyDictionary<string, string>? headers = null,
         string? queryString = null,
-        X509Certificate2? clientCertificate = null)
+        X509Certificate2? clientCertificate = null, CancellationToken requestAborted = default)
     {
         var context = new DefaultHttpContext
         {
             RequestServices = _services,
         };
+
+        context.RequestAborted = requestAborted;
 
         context.Request.Method = method;
         context.Request.Path = path;
@@ -246,10 +287,43 @@ public sealed class InboundFixture : IAsyncDisposable
             new EndpointMetadataCollection(route),
             displayName: $"inbound:{template}"));
 
+        using var responseBody = new MemoryStream();
+        context.Response.Body = responseBody;
+
         await Handler.HandleAsync(context);
 
-        return context.Response.StatusCode;
+        return new InboundTestResponse(
+            context.Response.StatusCode,
+            Encoding.UTF8.GetString(responseBody.ToArray()),
+            context.Response.Headers.ToDictionary(
+                header => header.Key,
+                header => header.Value.Select(value => value ?? string.Empty).ToArray(),
+                StringComparer.OrdinalIgnoreCase));
     }
+
+    /// <summary>Выполняет входящий вызов и возвращает только HTTP-статус.</summary>
+    public async Task<int> InvokeAsync(
+        InboundRouteMetadata route,
+        string method = "POST",
+        string path = "/callbacks/contracts",
+        string? template = "/callbacks/contracts",
+        string? body = null,
+        string? contentType = "application/json",
+        IReadOnlyDictionary<string, string>? headers = null,
+        string? queryString = null,
+        X509Certificate2? clientCertificate = null,
+        CancellationToken requestAborted = default) =>
+        (await InvokeWithResponseAsync(
+            route,
+            method,
+            path,
+            template,
+            body,
+            contentType,
+            headers,
+            queryString,
+            clientCertificate,
+            requestAborted)).StatusCode;
 
     /// <summary>Имитирует недоступность шины: последующие вызовы завершаются сбоем передачи.</summary>
     public async Task BreakGatewayBusAsync()

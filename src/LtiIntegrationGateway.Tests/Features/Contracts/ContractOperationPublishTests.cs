@@ -14,10 +14,10 @@ public class ContractOperationPublishTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http);
+        await CreateOutboundChannelAsync(http);
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         await UploadAsync(grpc, Document(("POST", "/callbacks/contracts", "receiveContract")));
         await SetVersionQueueAsync(grpc, 1);
@@ -59,10 +59,10 @@ public class ContractOperationPublishTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http);
+        await CreateOutboundChannelAsync(http);
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         await UploadAsync(grpc, Document(("POST", "/callbacks/contracts", "receiveContract")));
         await SetVersionQueueAsync(grpc, 1);
@@ -96,10 +96,10 @@ public class ContractOperationPublishTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http);
+        await CreateOutboundChannelAsync(http);
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         await UploadAsync(grpc, Document(("POST", "/callbacks/contracts", "receiveContract")));
 
@@ -118,10 +118,10 @@ public class ContractOperationPublishTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http);
+        await CreateOutboundChannelAsync(http);
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         await UploadAsync(grpc, Document(("POST", "/callbacks/contracts", "receiveContract")));
         await SetVersionQueueAsync(grpc, 1);
@@ -150,10 +150,10 @@ public class ContractOperationPublishTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http);
+        await CreateOutboundChannelAsync(http);
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         await UploadAsync(grpc, Document(("POST", "/callbacks/contracts", "receiveContract")));
         await SetVersionQueueAsync(grpc, 1);
@@ -181,10 +181,10 @@ public class ContractOperationPublishTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http);
+        await CreateOutboundChannelAsync(http);
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         await UploadAsync(grpc, Document(("POST", "/callbacks/contracts", "receiveContract")));
         await SetVersionQueueAsync(grpc, 1);
@@ -222,10 +222,10 @@ public class ContractOperationPublishTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http);
+        await CreateOutboundChannelAsync(http);
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         await UploadAsync(grpc, Document(("POST", "/callbacks/contracts", "receiveContract")));
         await SetVersionQueueAsync(grpc, 1);

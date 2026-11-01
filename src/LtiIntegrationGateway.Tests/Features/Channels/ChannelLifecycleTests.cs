@@ -36,11 +36,11 @@ public class ChannelLifecycleTests
 
         using (var db = database.CreateContext())
         {
-            var channel = await new GetChannelHandler(db).HandleAsync(new GetChannelQuery(channelId));
+            var result = await new GetChannelHandler(db).HandleAsync(new GetChannelQuery(channelId));
 
-            await Assert.That(channel.Channel!.ActiveRevision).IsNull();
-            await Assert.That(channel.Channel.Revisions.Count).IsEqualTo(1);
-            await Assert.That(channel.Channel.Revisions[0].Status).IsEqualTo(ChannelRevisionStatus.Draft);
+            await Assert.That(result.Channel!.ActiveRevision).IsNull();
+            await Assert.That(result.Channel.Revisions.Count).IsEqualTo(1);
+            await Assert.That(result.Channel.Revisions[0].Status).IsEqualTo(ChannelRevisionStatus.Draft);
         }
     }
 
@@ -63,7 +63,7 @@ public class ChannelLifecycleTests
         await Assert.That(first.ChannelId).IsNotNull();
         await Assert.That(second.ChannelId).IsNull();
         await Assert.That(second.Problems.Any(problem => problem.StartsWith("name", StringComparison.Ordinal))).IsTrue();
-        await Assert.That(await db.Channels.CountAsync()).IsEqualTo(1);
+        await Assert.That(await db.OutboundChannels.CountAsync()).IsEqualTo(1);
     }
 
     [Test]
@@ -146,11 +146,11 @@ public class ChannelLifecycleTests
 
         using (var db = database.CreateContext())
         {
-            var channel = await new GetChannelHandler(db).HandleAsync(new GetChannelQuery(channelId));
+            var result = await new GetChannelHandler(db).HandleAsync(new GetChannelQuery(channelId));
 
-            await Assert.That(channel.Channel!.ActiveRevision!.Number).IsEqualTo(2);
+            await Assert.That(result.Channel!.ActiveRevision!.Number).IsEqualTo(2);
             await Assert
-                .That(channel.Channel.Revisions.Single(revision => revision.Number == 1).Status)
+                .That(result.Channel.Revisions.Single(revision => revision.Number == 1).Status)
                 .IsEqualTo(ChannelRevisionStatus.Superseded);
         }
 
@@ -165,12 +165,12 @@ public class ChannelLifecycleTests
 
         using (var db = database.CreateContext())
         {
-            var channel = await new GetChannelHandler(db).HandleAsync(new GetChannelQuery(channelId));
+            var result = await new GetChannelHandler(db).HandleAsync(new GetChannelQuery(channelId));
 
-            await Assert.That(channel.Channel!.ActiveRevision!.Number).IsEqualTo(1);
-            await Assert.That(channel.Channel.Revisions.Count).IsEqualTo(2);
+            await Assert.That(result.Channel!.ActiveRevision!.Number).IsEqualTo(1);
+            await Assert.That(result.Channel.Revisions.Count).IsEqualTo(2);
             await Assert
-                .That(channel.Channel.Revisions.Single(revision => revision.Number == 2).Status)
+                .That(result.Channel.Revisions.Single(revision => revision.Number == 2).Status)
                 .IsEqualTo(ChannelRevisionStatus.Superseded);
         }
     }
@@ -215,11 +215,11 @@ public class ChannelLifecycleTests
 
         using (var db = database.CreateContext())
         {
-            var channel = await new GetChannelHandler(db).HandleAsync(new GetChannelQuery(channelId));
+            var result = await new GetChannelHandler(db).HandleAsync(new GetChannelQuery(channelId));
 
-            await Assert.That(channel.Channel!.ActiveRevision!.Number).IsEqualTo(1);
+            await Assert.That(result.Channel!.ActiveRevision!.Number).IsEqualTo(1);
             await Assert
-                .That(channel.Channel.Revisions.Single(revision => revision.Number == 2).Status)
+                .That(result.Channel.Revisions.Single(revision => revision.Number == 2).Status)
                 .IsEqualTo(ChannelRevisionStatus.Draft);
         }
     }

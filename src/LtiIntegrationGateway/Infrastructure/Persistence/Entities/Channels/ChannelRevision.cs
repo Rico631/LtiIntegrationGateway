@@ -10,11 +10,11 @@ public sealed class ChannelRevision : IEntity
     /// <summary>Уникальный идентификатор записи.</summary>
     public Guid Id { get; set; }
 
-    /// <summary>Идентификатор канала.</summary>
-    public Guid ChannelId { get; set; }
+    /// <summary>Идентификатор исходящего канала.</summary>
+    public Guid OutboundChannelId { get; set; }
 
-    /// <summary>Навигационное свойство канала.</summary>
-    public Channel? Channel { get; set; }
+    /// <summary>Навигационное свойство исходящего канала.</summary>
+    public OutboundChannel? OutboundChannel { get; set; }
 
     /// <summary>Номер ревизии в рамках канала, начиная с 1.</summary>
     public int Number { get; set; }

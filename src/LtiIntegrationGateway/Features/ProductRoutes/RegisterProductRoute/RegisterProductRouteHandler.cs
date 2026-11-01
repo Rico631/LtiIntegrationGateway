@@ -45,6 +45,23 @@ public sealed partial class RegisterProductRouteHandler(GatewayDbContext db)
         {
             problems.Add("allowed_channels: должен быть указан хотя бы один канал");
         }
+        else
+        {
+            var requested = command.AllowedChannels
+                .Where(channel => !string.IsNullOrWhiteSpace(channel))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+
+            var existing = await db.OutboundChannels
+                .Where(channel => requested.Contains(channel.Name))
+                .Select(channel => channel.Name)
+                .ToListAsync(cancellationToken);
+
+            foreach (var missing in requested.Except(existing, StringComparer.Ordinal))
+            {
+                problems.Add($"allowed_channels: outbound-канал '{missing}' не найден");
+            }
+        }
 
         if (productIdValid)
         {

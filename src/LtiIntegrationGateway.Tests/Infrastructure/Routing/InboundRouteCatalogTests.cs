@@ -4,8 +4,8 @@ namespace LtiIntegrationGateway.Tests.Infrastructure.Routing;
 
 public class InboundRouteCatalogTests
 {
-    private static InboundRouteSet Set(string revisionKey, params (string Channel, string Method, string Template)[] routes) =>
-        new(revisionKey, routes.Select(route => new InboundRouteDefinition(route.Channel, route.Method, route.Template)).ToArray());
+    private static InboundRouteSet Set(string revisionKey, params (string OutboundChannel, string Method, string Template)[] routes) =>
+        new(revisionKey, routes.Select(route => new InboundRouteDefinition(route.OutboundChannel, route.Method, route.Template)).ToArray());
 
     [Test]
     public async Task Activation_exposes_routes_in_snapshot()

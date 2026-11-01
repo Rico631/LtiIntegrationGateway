@@ -1,18 +1,213 @@
-# Архитектура решения
+# Архитектура LtiIntegrationGateway
 
-Документ описывает **фактическую организацию кода** `LtiIntegrationGateway`: состав решения, карту
-каталогов, вертикальные срезы, инфраструктурные компоненты, потоки данных и принятые соглашения.
+Документ фиксирует **архитектурный контекст, границы ответственности, принципы и ограничения**
+`LtiIntegrationGateway`, а также фактическую организацию кода, инфраструктурные компоненты и
+потоки выполнения. Это актуальное описание системы, а не журнал истории решений.
 
-Источники:
+## Источники истины и границы документации
 
-- требования и архитектурные решения — `docs/adr/0001-integration-gateway.md` (ссылки вида «ADR §8.7»);
-- правила ведения артефактов OpenSpec — `openspec/config.yaml`;
-- сборка, запуск и эксплуатация — `README.md`;
-- обязательная документация контрактов — `AGENTS.md`.
+- `openspec/specs/` — актуальные функциональные и системные требования, наблюдаемое поведение
+  и проверяемые сценарии.
+- `ARCHITECTURE.md` — архитектурные границы, принципы, технические ограничения, взаимодействия
+  компонентов и фактическая реализация этих принципов.
+- `src/LtiIntegrationGateway/Protos/` — исходные контракты gRPC/REST и сообщений Rebus.
+- `README.md` — обзор репозитория, команды сборки, запуска и настройки.
+- `AGENTS.md` — правила разработки и обязательного документирования контрактов.
+- `openspec/changes/archive/` — история изменений, включая исходные причины, проектирование и
+  задачи реализации.
 
-**Актуальность.** Файл отражает текущее состояние кода и обновляется после архивации каждого
-изменения (правило `operations.archive.guidance` в `openspec/config.yaml`). Разделы 1–9 описывают
-то, что уже есть в репозитории; плановые элементы ADR сюда не переносятся.
+OpenSpec Specs описывают, **что система должна делать**. Этот документ описывает, **какие
+архитектурные границы и механизмы приняты и как система устроена сейчас**. Детальные сценарии
+возможностей не дублируются здесь, если они уже описаны в соответствующих Specs.
+
+**Актуальность.** Фактическое состояние кода проверяется и обновляется после архивации OpenSpec
+Change, если изменение затронуло компоненты, структуру, взаимодействия, контракты или архитектурные
+ограничения. История изменений не копируется в этот файл: её источником является OpenSpec Archive.
+
+## 0. Архитектурный контекст и принципы
+
+### 0.1. Назначение и границы ответственности
+
+`LtiIntegrationGateway` — самостоятельное приложение, обеспечивающее интеграцию продуктов LTI с
+внешними системами по HTTP API. Шлюз централизует транспортные механизмы интеграции, каналы,
+аутентификацию, валидацию входящих контрактов, маршрутизацию сообщений, повторные попытки,
+сохранение результатов и аудит.
+
+**Продукты владеют бизнес-смыслом интеграции.** Продукт выбирает бизнес-операцию, знает структуру
+внешнего API, формирует данные исходящего запроса и интерпретирует ответ внешней системы. Шлюз не
+выполняет бизнес-маппинг и не принимает бизнес-решения на основании содержимого HTTP-ответа.
+
+Граница взаимодействия:
+
+- бизнес-данные и результаты интеграционных операций между продуктами и шлюзом передаются через
+  Rebus;
+- продукты не используют REST/gRPC управляющего API для отправки бизнес-запросов или получения
+  результатов интеграции;
+- gRPC и REST (через JSON transcoding) используются для управления каналами, маршрутами,
+  контрактами и конфигурацией, а также для диагностических операций;
+- входящие HTTP-вызовы от внешних систем принимаются шлюзом и передаются целевому продукту через
+  Rebus.
+
+Исходящий и входящий контуры независимы и имеют раздельные модели каналов: `OutboundChannel` и
+`InboundChannel`. Единый двунаправленный канал не используется.
+
+### 0.2. Контекст взаимодействия
+
+```mermaid
+flowchart TB
+    P[Продукты LTI]
+    R[Rebus]
+    subgraph G[LtiIntegrationGateway]
+        O[Outbound Dispatcher]
+        I[Inbound HTTP endpoints]
+        V[OpenAPI validation]
+        M[Management API]
+        C[Channel and contract registry]
+        A[Authorization and secret access]
+        L[Message logs and audit]
+    end
+    DB[(Configuration and message storage)]
+    E[External systems]
+
+    P -->|OutboundRequest| R
+    R --> O
+    O --> C
+    O --> A
+    O -->|HTTP request| E
+    E -->|HTTP response| O
+    O --> L
+    O -->|OutboundResult| R
+    R --> P
+
+    E -->|HTTP callback| I
+    I --> V
+    V --> L
+    V -->|InboundMessage| R
+    R --> P
+
+    M --> C
+    C <--> DB
+    L <--> DB
+```
+
+### 0.3. Стиль приложения и организация кода
+
+Приложение реализовано как модульный монолит с разделением по функциональным областям:
+
+- весь производственный код находится в `LtiIntegrationGateway`;
+- автоматические тесты находятся в отдельном `LtiIntegrationGateway.Tests`;
+- функциональность организована по Feature-first и Vertical Slice Architecture;
+- вертикальный срез содержит сценарий и необходимые ему проверки, работу с данными и результат;
+- общие инфраструктурные компоненты располагаются в `Infrastructure`;
+- универсальные репозитории, медиаторы и абстракции не вводятся без конкретной необходимости;
+- производственный код шлюза не зависит от сборок конкретных продуктов.
+
+### 0.4. Контрактный подход и совместимость
+
+Protobuf используется как contract-first формат для gRPC API и сообщений, передаваемых через Rebus.
+Файлы `.proto` являются исходным определением транспортных контрактов; C#-типы генерируются
+через `Grpc.Tools` и не поддерживаются вручную как параллельные DTO.
+
+Контракты не зависят от EF Core-сущностей, внутренней модели хранения или бизнес-моделей продуктов.
+Опубликованные `.proto` распространяются как исходные файлы из репозитория; потребители фиксируют
+используемую версию по тегу или коммиту.
+
+Правила совместимости:
+
+- внутри версии допускаются совместимые добавочные изменения;
+- несовместимое изменение оформляется новой версией protobuf package, а шлюз на переходном этапе
+  может обрабатывать несколько версий параллельно;
+- номер поля не переиспользуется; удалённые номера и имена помечаются `reserved`;
+- смысл существующего поля не меняется в рамках той же версии;
+- нулевое значение enum именуется `*_UNSPECIFIED`; для скалярных полей, где важно различать
+  отсутствие и значение по умолчанию, используется `optional`;
+- `google.protobuf.Any` не используется в интеграционных сообщениях; тела запросов и ответов
+  передаются как `bytes`.
+
+Сериализация сообщений Rebus использует ProtoJSON (UTF-8) через собственный `ISerializer`:
+
+| Элемент | Правило |
+|---|---|
+| Формат тела | ProtoJSON, UTF-8 |
+| Печать | `JsonFormatter.Default`; имена camelCase, enum — строковыми именами, `bytes` — base64 |
+| Разбор | `JsonParser` с `IgnoreUnknownFields = true`; поддерживаются camelCase и snake_case |
+| Неизвестное имя enum | ошибка разбора; неизвестное числовое значение enum сохраняется |
+| 64-битные целые | строковое представление по правилам ProtoJSON |
+| `rbs2-msg-type` | полное protobuf-имя сообщения |
+| `rbs2-content-type` | `application/json` |
+
+### 0.5. Статические и динамические HTTP endpoint
+
+Управляющие gRPC-сервисы публикуются также как REST endpoint через JSON transcoding. Эти маршруты
+определены статическими Protobuf-контрактами приложения.
+
+Inbound endpoint-ы формируются динамически из опубликованных OpenAPI-контрактов. Для них используется
+кастомный `EndpointDataSource`, подключённый к `IEndpointRouteBuilder.DataSources`. При активации
+ревизии каталог маршрутов обновляется без пересборки и перезапуска приложения.
+
+Публикация набора маршрутов отклоняется, если в активной конфигурации есть конфликтующие пары
+«HTTP-метод + шаблон». Пересекающиеся, но не конфликтующие шаблоны сопоставляются штатным механизмом
+приоритета ASP.NET Core. Поведение динамического добавления/удаления маршрутов и применения rate limit
+покрыто интеграционными тестами.
+
+JSON transcoding не используется для публикации динамических маршрутов из загруженного OpenAPI:
+это отдельный runtime-механизм ASP.NET Core.
+
+### 0.6. Жизненный цикл конфигурации
+
+Каналы и OpenAPI-контракты изменяются через версионируемые конфигурации:
+
+1. создаётся или изменяется черновик;
+2. конфигурация проверяется;
+3. валидная конфигурация публикуется как неизменяемая ревизия;
+4. ревизия активируется;
+5. при необходимости выполняется откат к предыдущей ревизии.
+
+Runtime использует согласованные снимки конфигурации. Запрос обрабатывается в рамках той ревизии,
+с которой он был начат. Изменения каналов, контрактов и маршрутов применяются без перезапуска.
+Изменение секретов, поступающих через переменные окружения, требует перезапуска процесса, поскольку
+источники конфигурации .NET не перечитываются автоматически.
+
+### 0.7. Безопасность и надёжность: архитектурные ограничения
+
+- Значения секретов не хранятся в БД и не передаются в сообщениях Rebus, результатах API или логах.
+  В конфигурации хранятся тип авторизации, ключ конфигурации и несекретные параметры; секреты
+  читаются через `ISecretStore` из конфигурации окружения.
+- Проверка отсутствующих секретов активной конфигурации выполняется при старте приложения; отсутствие
+  необходимого секрета приводит к fail-fast отказу запуска.
+- Для исходящих HTTP-вызовов базовый URL берётся из конфигурации канала; путь запроса является
+  относительным и структурно проверяется до отправки. Автоматические редиректы отключены.
+- Проверка серверного TLS-сертификата не отключается; минимальная версия TLS — 1.2.
+- Клиентские сертификаты учитываются при выделении HTTP handler pool: соединения не разделяются
+  между конфигурациями с разными сертификатами.
+- HTTP-повторы определяются транспортной ошибкой и HTTP-статусом, а не бизнес-содержимым тела
+  ответа. Для потенциально небезопасных `POST`/`PATCH` повтор допустим только при наличии
+  `idempotency_key`.
+- Гарантия доставки результата — «минимум один раз», а не exactly-once. Получатель должен
+  учитывать возможную повторную доставку и выполнять дедупликацию по `message_id`.
+- Исходящий результат сохраняется до попытки отправки и может быть повторно доставлен фоновым
+  диспетчером.
+- Текущий транспорт Rebus — in-memory: сообщения в очереди не переживают остановку или аварию
+  процесса. Такой транспорт подходит для начального этапа и тестирования, но не обеспечивает
+  промышленную надёжную доставку. Для входящего контура гарантия доставки также зависит от
+  настроенного транспорта Rebus.
+
+### 0.8. Поддержка OpenAPI
+
+Для входящих контрактов используется целевой формат OpenAPI 3.0. Документы Swagger 2.0
+конвертируются при загрузке; OpenAPI 3.1 не принимается текущей реализацией.
+
+Проверка документа выполняется при публикации и работает по принципу fail-closed:
+
+- поддерживается закрытый перечень конструкций OpenAPI 3.0;
+- разрешены только локальные `$ref`; внешние HTTP(S), `file`, protocol-relative и относительные
+  ссылки запрещены;
+- `$ref` с соседними полями отклоняется;
+- конфликты маршрутов и проблемы контракта обнаруживаются до активации;
+- схемы запросов компилируются для активной ревизии и используются повторно при обработке запросов.
+
+Поддерживаемые конструкции и конкретные правила валидации отражаются в OpenSpec spec
+`contract-registry` и связанных спеках входящего контура.
 
 ## 1. Состав решения
 
@@ -41,7 +236,7 @@
 | Регистрация срезов `Features/Channels` | валидатор и шесть сценариев жизненного цикла |
 | Регистрация outbound-шагов | `ISecretStore`, маршруты продуктов, шаги проверки и вызова; `StoredOutboundResultFactory` восстанавливает результат для повтора и диспетчера |
 | Регистрация диспетчера результатов | `Configure<OutboundDeliveryOptions>` и `AddHostedService<OutboundResultDispatcher>`; параметры — ключи `Outbound:DeliveryDispatcher` |
-| Регистрация инфраструктуры исходящих вызовов | пул `ChannelHttpClientPool` (`IChannelHttpClientFactory`) и `IChannelCertificateStore`; `AllowAutoRedirect = false`, TLS 1.2+ (ADR §7.5, §7.7) |
+| Регистрация инфраструктуры исходящих вызовов | пул `ChannelHttpClientPool` (`IChannelHttpClientFactory`) и `IChannelCertificateStore`; `AllowAutoRedirect = false`, TLS 1.2+ (см. раздел 0.7) |
 | Каталог входящих маршрутов и источник endpoint'ов | синглтоны `InboundRouteCatalog`, `InboundEndpointDataSource` |
 | `AddRateLimiter` | политика `inbound-per-channel`, `429` при превышении |
 | Контракты и управляющий API | reader OpenAPI, четыре среза контрактов, `ManagementApiService` |
@@ -66,8 +261,8 @@
 
 | Каталог | Содержимое | Где описано |
 |---|---|---|
-| `Protos/v1` | интеграционные сообщения `lti.gateway.messages.v1` и управляющий API `lti.gateway.management.v1` | ADR §5, §8.3–8.5, §9.3, §15.2 |
-| `Protos/google/api` | вендорные `annotations.proto` и `http.proto` для HTTP-аннотаций; не редактируются, C#-типы берутся из `Google.Api.CommonProtos` | ADR §5.1 |
+| `Protos/v1` | интеграционные сообщения `lti.gateway.messages.v1` и управляющий API `lti.gateway.management.v1` | контракты `Protos/v1` и OpenSpec Specs |
+| `Protos/google/api` | вендорные `annotations.proto` и `http.proto` для HTTP-аннотаций; не редактируются, C#-типы берутся из `Google.Api.CommonProtos` | раздел 0.5 |
 | `Contracts` | `MessageContractValidator` — проверка обязательных полей `OutboundRequest` | spec `message-contracts` |
 | `Features/Channels` | канал и его ревизии: создание, черновик, публикация, активация, откат, чтение | spec `channel-registry` |
 | `Features/ProductRoutes` | маршруты продуктов: разрешённые каналы и вычисленный адрес очереди `<product_id>.inbox` | spec `outbound-dispatch` |
@@ -75,22 +270,22 @@
 | `Features/Contracts` | версии OpenAPI-контрактов: загрузка, публикация со схемами тела и переносом настроек операций, настройки приёма и настройки операции, активация, чтение версии и операций | spec `contract-registry`, `management-api` |
 | `Features/Inbound` | приём входящего вызова: проверки, аутентификация, публикация `InboundMessage`, журнал, отказ отключённой операции | spec `inbound-dispatch`, `inbound-routing` |
 | `Features/Management` | gRPC-фасад управляющего API и маппинг proto ↔ домен | spec `management-api` |
-| `Infrastructure/Persistence` | `GatewayDbContext`, сущности, миграции | ADR §11 |
-| `Infrastructure/Rebus` | `ProtobufSerializer`, `ProtobufMessageRegistry`, конфигурация шины | ADR §5.3, §10 |
-| `Infrastructure/OpenApi` | чтение документа, fail-closed проверки, извлечение и кэширование схем тела | ADR §14 |
-| `Infrastructure/Routing` | каталог маршрутов, источник endpoint'ов, валидатор набора, метаданные маршрута, лимит частоты | ADR §5.2, §9.6 |
-| `Infrastructure/Http` | `ChannelHttpClientKey`, `ChannelHttpClientPool` (`IChannelHttpClientFactory`), аренда обработчика: пул соединений по ключу канала | ADR §7.7 |
-| `Infrastructure/Security` | `ISecretStore`, `IChannelCertificateStore` и реализации поверх `IConfiguration`; кэш клиентских сертификатов на время жизни процесса | ADR §7.5, §13 |
-| `Infrastructure/Management` | ключ управляющего API, аудит управляющих операций | ADR §13, §15.1 |
-| `Infrastructure/Observability` | OTel-настройки, `GatewayTelemetry`, `GatewayMetrics`, backlog-gauge и OTLP-экспорт | ADR §17 |
-| `Infrastructure/Health` | `DatabaseHealthCheck` для `GET /health/ready` | ADR §17, §20 |
+| `Infrastructure/Persistence` | `GatewayDbContext`, сущности, миграции | раздел 5 |
+| `Infrastructure/Rebus` | `ProtobufSerializer`, `ProtobufMessageRegistry`, конфигурация шины | разделы 0.4 и 6 |
+| `Infrastructure/OpenApi` | чтение документа, fail-closed проверки, извлечение и кэширование схем тела | раздел 0.8 |
+| `Infrastructure/Routing` | каталог маршрутов, источник endpoint'ов, валидатор набора, метаданные маршрута, лимит частоты | раздел 0.5 и spec `inbound-dispatch` |
+| `Infrastructure/Http` | `ChannelHttpClientKey`, `ChannelHttpClientPool` (`IChannelHttpClientFactory`), аренда обработчика: пул соединений по ключу канала | раздел 0.7 |
+| `Infrastructure/Security` | `ISecretStore`, `IChannelCertificateStore` и реализации поверх `IConfiguration`; кэш клиентских сертификатов на время жизни процесса | раздел 0.7 |
+| `Infrastructure/Management` | ключ управляющего API, аудит управляющих операций | раздел 8 |
+| `Infrastructure/Observability` | OTel-настройки, `GatewayTelemetry`, `GatewayMetrics`, backlog-gauge и OTLP-экспорт | раздел 8 |
+| `Infrastructure/Health` | `DatabaseHealthCheck` для `GET /health/ready` | раздел 8 |
 
 `bin`, `obj`, `Properties` — служебные, в архитектуре не участвуют.
 
 ## 4. Вертикальные срезы
 
 Каждый сценарий — отдельный каталог с командой/запросом, результатом и обработчиком; общих
-репозиториев и медиатора нет (ADR §4.2).
+репозиториев и медиатора нет (раздел 0.3).
 
 ### Каналы (spec `channel-registry`)
 
@@ -164,20 +359,20 @@ Features/Host
 
 ```text
 Features/Inbound
-├── InboundRequestHandler          порядок проверок, InboundMessage, журнал, 202/503
+├── InboundRequestHandler          проверки, InboundMessage, журнал, 202 async / ответ sync / 504 / 502
 ├── InboundRequestPath             фактический путь запроса без query и декодирования
 ├── InboundRequestAuthenticator    none, api_key, basic, client_certificate
 ├── InboundDisabledOperationHandler 404 без чтения тела и аутентификации + аудит InboundOperationDisabled
-├── InboundMessageLogWriter        запись pending → sent | failed
-└── InboundMessagePublisher        IInboundMessagePublisher + Rebus-реализация
+├── InboundMessageLogWriter        запись Pending → Sent | Replied | TimedOut | Cancelled | Failed
+└── InboundMessagePublisher        IInboundMessagePublisher + Rebus Send / SendRequest
 
 Infrastructure/Routing
-├── InboundRouteDefinition     маршрут с действующими настройками операции и признаком Enabled
+├── InboundRouteDefinition     маршрут, настройки операции, режим ответа и timeout
 ├── InboundRouteCatalog        активные наборы, снапшот, токен изменения
 ├── InboundRouteSetValidator   методы, шаблоны, конфликты (включая отключённые операции)
 ├── InboundEndpointDataSource  RouteEndpoint'ы, метаданные маршрута, делегат приёма или отказа
 ├── InboundChannelMetadata     канал как ключ лимита частоты
-├── InboundRouteMetadata       ревизия, операция, очередь, авторизация, квота
+├── InboundRouteMetadata       ревизия, операция, очередь, авторизация, квота, mode/timeout
 └── InboundRateLimitOptions    квота и окно по умолчанию
 
 Infrastructure/OpenApi
@@ -190,9 +385,10 @@ Infrastructure/OpenApi
 ```text
 Features/Management
 ├── ManagementApiService              gRPC-фасад: зависимости и общие помощники
-├── ManagementApiService.Channels     каналы и ревизии
+├── ManagementApiService.Channels     outbound-каналы и ревизии
+├── ManagementApiService.InboundChannels  inbound-каналы, настройки и health
 ├── ManagementApiService.Catalog      маршруты продуктов, статус операции
-├── ManagementApiService.Contracts    версии контрактов
+├── ManagementApiService.Contracts    версии контрактов inbound-каналов
 └── ChannelMapping                    proto ↔ ChannelConfiguration
 ```
 
@@ -204,12 +400,12 @@ Features/Management
 | Компонент | Ответственность | Особенности |
 |---|---|---|
 | `Persistence/GatewayDbContext` | модель данных и конфигурация EF Core | уникальные индексы, каскады, конвертация enum и политики повторов в строку/JSON |
-| `Persistence/Entities` | каналы и ревизии, маршруты продуктов, контракты с настройками приёма, операции со схемами, журналы; папки по логическим областям, все классы реализуют `IEntity`, публичные свойства документированы | опубликованные ревизии и версии контрактов неизменяемы |
-| `Persistence/Migrations` | `InitialChannelRegistry`, `AddOutboundDispatch`, `AddContractRegistry`, `AddInboundDispatch`, `AddOutboundResultDispatcher`, `AddContractOperationSettings` | применяются при старте |
+| `Persistence/Entities` | outbound/inbound-каналы, ревизии, маршруты продуктов, контракты с настройками приёма, операции со схемами, журналы; папки по логическим областям, все классы реализуют `IEntity`, публичные свойства документированы | опубликованные ревизии и версии контрактов неизменяемы; направления разделены |
+| `Persistence/Migrations` | `InitialSchema` — базовая схема с `OutboundChannels`, `InboundChannels` и журналом ответов | применяется при старте; старые dev-миграции удалены |
 | `Rebus/ProtobufSerializer` | `ISerializer` на ProtoJSON | заголовки `rbs2-msg-type` и `rbs2-content-type` |
 | `Rebus/ProtobufMessageRegistry` | реестр типов сообщений | неизвестный тип — диагностируемая ошибка |
 | `Rebus/RebusConfigurationExtensions` | регистрация шины, error-queue и обработчика | входная очередь `lti.gateway.outbound`, error-queue `lti.gateway.error` |
-| `OpenApi/MicrosoftOpenApiDocumentReader` | чтение документа, версия, синтаксис | `Microsoft.OpenApi` 3.11.0 (ADR §14) |
+| `OpenApi/MicrosoftOpenApiDocumentReader` | чтение документа, версия, синтаксис | `Microsoft.OpenApi` 3.11.0 (раздел 0.8) |
 | `OpenApi/OpenApiDocumentValidator` | fail-closed проверки, извлечение операций и схем тела | запрещённые ключевые слова, `$ref`, `format`; инлайнинг `$ref` до глубины 32 |
 | `OpenApi/InboundSchemaCache` | скомпилированные схемы активных ревизий | `NJsonSchema` 11.6.1, компиляция при активации |
 | `Management/ManagementApiKeyMiddleware` | ключ управляющего API | `401`/`503`, gRPC `Unauthenticated` |
@@ -219,7 +415,7 @@ Features/Management
 | `Security/ConfigurationChannelCertificateStore` | клиентский сертификат по `config_key` | PFX из файла или base64, пароль `<config_key>:Password`, кэш на время жизни процесса |
 | `Http/ChannelHttpClientPool` | пул `SocketsHttpHandler` по ключу канала | TLS 1.2+, без редиректов, проверка серверного сертификата, срок жизни соединения 5 минут |
 
-Имена очередей сосредоточены в `Rebus/QueueNames` (ADR §10.2, решение 28): входная очередь
+Имена очередей сосредоточены в `Rebus/QueueNames` (имена очередей определены в разделе 6): входная очередь
 `lti.gateway.outbound`, error-queue `lti.gateway.error` (настраивается `RetryStrategy` с сохранением
 значений по умолчанию для числа попыток и кулдауна), очередь продукта вычисляется как
 `<product_id>.inbox`. Список `ProductRouteQueueAddress` остаётся в модели для обратной
@@ -229,12 +425,11 @@ Features/Management
 ## 6. Контракты и генерация кода
 
 - `Protos/v1/integration_messages.proto` — сообщения Rebus (`lti.gateway.messages.v1`):
-  `OutboundRequest`, `OutboundResult`, `InboundMessage`, `QueryParameter`, `Outcome`.
-- `Protos/v1/management_api.proto` — управляющий API (`lti.gateway.management.v1`): один сервис
-  `ManagementService`, HTTP-аннотации для REST через transcoding. Состояние канала отдаёт RPC
-  `GetChannelHealth` (`GET /v1/channels/{channel_name}/health`); ответ содержит состояние активной
-  ревизии, признак настроенного секрета, срок действия клиентского сертификата и последние ошибки;
-  используются `google.protobuf.Timestamp`.
+  `OutboundRequest`, `OutboundResult`, `InboundMessage`, `InboundResponse`, `InboundResponseHeader`,
+  `QueryParameter`, `Outcome`. `reply_expected` включает request/reply для sync inbound.
+- `Protos/v1/management_api.proto` — управляющий API (`lti.gateway.management.v1`): direction-first
+  ресурсы `/v1/outbound-channels` и `/v1/inbound-channels`; состояние отдают RPC
+  `GetOutboundChannelHealth` и `GetInboundChannelHealth`; используются `google.protobuf.Timestamp`.
 - `Protos/google/api/*.proto` — вендорные дескрипторы; подключаются только как путь импорта,
   C#-типы берутся из `Google.Api.CommonProtos` (иначе конфликт типов CS0436).
 - Генерация выполняется при сборке (`Grpc.Tools`); сгенерированные файлы не редактируются и в
@@ -252,7 +447,7 @@ Features/Management
 `CreatedAt`) → `Send` результата → журнал `sent`. Отказы, возникшие до проверки адреса возврата,
 не доставляются: операция `Completed`, журнал `undeliverable`, адрес пуст. Невалидный DTO
 (`FailFastException`) уходит в `lti.gateway.error` без операции, журнала и HTTP-вызова
-(ADR §8, spec `outbound-dispatch`).
+(spec `outbound-dispatch`).
 
 Недоставленные записи `pending` повторно отправляет `OutboundResultDispatcher`: выборка идёт в SQL по
 индексу `(DeliveryStatus, CreatedAt)` с фильтром «адрес не пуст и операция существует», поэтому
@@ -260,18 +455,18 @@ Features/Management
 гарантия остаётся «минимум один раз». Повторный `OutboundRequest` с завершённым `message_id` отдаёт
 идентичный сохранённый результат на адрес из текущего сообщения; владение `product_id` проверяется до
 выдачи результата, а проверки канала и авторизации для завершённой операции не
-повторяются (ADR §8.9, §8.10).
+повторяются (см. разделы 0.7 и 7; spec `outbound-dispatch`).
 
 **Контракты.** Загрузка создаёт черновик версии; публикация извлекает операции и схемы тела
 (локальные `$ref` разворачиваются), требует очередь получателя в настройках версии формата
-`<product_id>.inbox` (ADR §15.2, §10.2),
+`<product_id>.inbox` (см. разделы 0.4 и 6),
 дополнительно проверяет действующую очередь каждой включённой операции, переносит настройки операций
 из предыдущей версии канала (по `operationId`, а при его отсутствии хотя бы у одной из операций — по
 совпадению метода и шаблона; изменённый `operationId` при том же маршруте — новая операция) и
 проверяет конфликты; активация сначала регистрирует набор в каталоге маршрутов, затем одной
 транзакцией меняет статусы версий,
 снимает набор предыдущей версии и пересобирает кэш схем; при проблемах каталога база не меняется
-(ADR §5.2, spec `contract-registry`).
+(spec `contract-registry`).
 
 **Настройки операции.** Действующие значения вычисляются при построении набора маршрутов
 (`ContractRouteSets`): очередь — операция, иначе версия; квота и окно — только версия, иначе
@@ -279,13 +474,13 @@ Features/Management
 бюджет ограничения частоты. Операции извлекаются при публикации,
 поэтому для черновика настройки операции недоступны (`404`). Изменение настроек версии `Active`
 перерегистрирует набор с тем же ключом ревизии: отказ каталога оставляет прежний набор и не меняет
-базу; версия `Superseded` отклоняется с проблемой `version` (ADR §7.3, §15.2).
+базу; версия `Superseded` отклоняется с проблемой `version` (spec `contract-registry` и `management-api`).
 
 **Входящий контур.** Запрос попадает на динамический endpoint с метаданными маршрута, далее
 фиксированный порядок: query (≤ 64) → `Content-Type` по схемам ревизии → наличие схемы тела →
 аутентификация по настройкам ревизии → глубина JSON (≤ 64) → валидация по схеме → запись журнала
 `pending` → `Send` в очередь получателя → журнал `sent` и `202`. Любой отказ пишется в журнал
-`failed` с кодом ошибки; при сбое `Send` ответ `503` (ADR §9.6, spec `inbound-dispatch`).
+`failed` с кодом ошибки; при сбое `Send` ответ `503` (spec `inbound-dispatch`).
 Отключённая операция обслуживается отдельным делегатом: тело не читается, аутентификация не
 выполняется, в `ManagementAuditEntry` пишется `InboundOperationDisabled`, ответ — `404`.
 
@@ -299,19 +494,19 @@ Features/Management
 
 | Решение | Причина |
 |---|---|
-| Ревизия — агрегат настроек, в `Channel` настроек нет | неизменяемость опубликованного и безопасный откат |
+| Ревизия — агрегат настроек, в `OutboundChannel`/`InboundChannel` настроек нет | неизменяемость опубликованного и безопасный откат |
 | Результат операции — запись с `Problems`, а не исключение | отказ домена не является сбоем, список проблем возвращается целиком |
 | Операции с одним значением и возможным отказом возвращают `Result<T>` | единая форма `Value`/`ErrorCode`/`ErrorMessage` вместо дублирующихся result-записей |
 | Новые дочерние сущности добавляются через `DbSet`, а не только в навигацию | клиентский Guid-ключ: EF считает их `Modified`, `UPDATE` не находит строку |
 | Моменты времени журналов хранятся как миллисекунды Unix через EF-конвертер | SQLite не умеет сортировать `DateTimeOffset`; преобразование типа скрыто в модели, а индексы и `ORDER BY` работают по `CreatedAt`/`ReceivedAt` |
 | Строковые поля proto заполняются только непустыми значениями | присваивание `null` бросает `ArgumentNullException` |
-| Динамические endpoint'ы добавляются в `IEndpointRouteBuilder.DataSources` | регистрации `EndpointDataSource` в DI недостаточно (ADR §5.2) |
-| gRPC-сервисы публикуются в корне | transcoding сохраняет пути `/v1/...`; следствие — двухсегментные inbound-маршруты отвечают `404` вместо `405` (ADR §15.2) |
+| Динамические endpoint'ы добавляются в `IEndpointRouteBuilder.DataSources` | регистрации `EndpointDataSource` в DI недостаточно (см. раздел 0.5) |
+| gRPC-сервисы публикуются в корне | transcoding сохраняет пути `/v1/...`; следствие — двухсегментные inbound-маршруты отвечают `404` вместо `405` (см. раздел 6) |
 | Секреты читаются только через `ISecretStore` | в базе и API хранятся лишь ключи конфигурации |
-| Схемы тела компилируются один раз на ревизию | валидация не тратит CPU на каждый запрос (ADR §14) |
+| Схемы тела компилируются один раз на ревизию | валидация не тратит CPU на каждый запрос (раздел 0.8) |
 | Публикация сообщения идёт через `IInboundMessagePublisher` | транспорт изолирован, сбой передачи наблюдаем в тестах |
 | Запись журнала `pending` создаётся до `Send` | сбой передачи виден в журнале, а не теряется |
-| Сравнение секретов — `CryptographicOperations.FixedTimeEquals` | исключение утечки по времени (ADR §13) |
+| Сравнение секретов — `CryptographicOperations.FixedTimeEquals` | исключение утечки по времени (см. раздел 0.7) |
 
 ## 9. Тесты
 
@@ -343,39 +538,16 @@ Features/Management
 
 Запуск: `dotnet test LtiIntegrationGateway.slnx` (через `Microsoft.Testing.Platform`, см. `global.json`).
 
-## 10. Соответствие архивным изменениям
+## 10. Поддержание актуальности
 
-Каждый блок кода появился из архивированного изменения; полный контекст — в
-`openspec/changes/archive/<change>/` и в постоянных спеках `openspec/specs/`.
+После реализации и архивации OpenSpec Change:
 
-| Изменение | Capability | Что появилось в коде |
-|---|---|---|
-| `2026-10-29-bootstrap-solution-skeleton` | `gateway-host` | хост, `/health/live`, EF Core + миграции, fail-fast конфигурации |
-| `2026-10-29-define-integration-contracts` | `message-contracts` | `integration_messages.proto`, `MessageContractValidator` |
-| `2026-10-29-rebus-protobuf-serialization` | `message-serialization` | `Infrastructure/Rebus` (сериализатор, реестр, конфигурация) |
-| `2026-10-29-channel-registry` | `channel-registry` | `Features/Channels`, сущности каналов и ревизий, первая миграция |
-| `2026-10-29-outbound-dispatch` | `outbound-dispatch` | `Features/Outbound`, `Features/ProductRoutes`, `Infrastructure/Security`, операции и журнал |
-| `2026-10-29-inbound-routing-spike` | `inbound-routing` | `Infrastructure/Routing`, `Features/Inbound`, лимит частоты |
-| `2026-10-29-management-grpc-api` | `management-api`, `contract-registry` | `Protos/v1/management_api.proto`, `Features/Management`, `Features/Contracts`, `Infrastructure/OpenApi`, `Infrastructure/Management`, миграция контрактов |
-| `2026-10-29-inbound-dispatch` | `inbound-dispatch` (+ `inbound-routing`, `contract-registry`, `management-api`) | приём вызова, аутентификация, схемы тела, журнал `InboundMessageLog`, настройки версии контракта, миграция `AddInboundDispatch` |
-| `2026-10-31-outbound-client-certificate` | `outbound-dispatch` | `Infrastructure/Http` (пул `SocketsHttpHandler` по ключу канала), `IChannelCertificateStore`, авторизация `client_certificate` |
-| `2026-10-31-outbound-result-dispatcher` | `outbound-dispatch` | `OutboundResultDispatcher`, `StoredOutboundResultFactory`, адрес доставки и ревизия в журнале, индекс `pending`, миграция `AddOutboundResultDispatcher` |
-| `2026-10-31-inbound-operation-settings` | `contract-registry`, `inbound-routing`, `management-api` | настройки операции (`enabled`, очередь), `PATCH .../operations/{operationId}`, отключённые маршруты `404` + аудит, миграция `AddContractOperationSettings` |
-| `2026-10-31-channel-health` | `management-api` | срез `GetChannelHealth`, RPC `GetChannelHealth` (`GET /v1/channels/{channel_name}/health`), `ChannelCertificateInfo` для диагностики сертификата, индексы «канал + время» в обоих журналах, миграции `AddInboundReceivedAtUnixMs`, `AddOutboundErrorIndex` |
-| `2026-10-31-queue-naming` | `message-serialization`, `outbound-dispatch`, `contract-registry` | `QueueNames` (входная очередь `lti.gateway.outbound`, error-queue `lti.gateway.error`), вычисляемый адрес продукта `<product_id>.inbox`: регистрация и чтение маршрута (проблема `address`), проверка `rbs2-sender-address` и `rbs2-return-address`, формат очереди версии контракта при публикации (проблема `queue`) |
-| `2026-10-31-complete-management-api` | `management-api` | аудит чтения канала и отказов `NotFound`, выравнивание комментариев контракта и README |
-| `2026-10-31-fix-adr-deviations` | `outbound-dispatch`, `management-api`, `contract-registry`, `channel-registry`, `inbound-routing`, `gateway-host` | доставка отказа только на проверенный адрес (`Undeliverable`), `FailFastException` для невалидного DTO, `ProblemSeverity`, валидация management-команд, проверка секретов при старте, удаление квоты операции и Unix-колонок (миграции `RemoveContractOperationRateLimit`, `RemoveUnixTimestampColumns`) |
-| `2026-10-31-otel-observability` | `observability`, `gateway-host` | `Infrastructure/Observability` (OTLP traces/metrics, бизнес-метрики, backlog-gauge), Rebus diagnostics, readiness-проверка `DatabaseHealthCheck`, `/health/ready` |
+1. проверить, что постоянные Specs отражают актуальные функциональные требования и сценарии;
+2. обновить этот документ, если изменились архитектурные границы, компоненты, контракты,
+   взаимодействия, транзакционные границы, инфраструктурные ограничения или фактическая структура кода;
+3. описывать здесь текущее состояние, а не копировать историю принятия решения или перечень изменений;
+4. удалить описания компонентов, путей и механизмов, которые больше не существуют;
+5. проверить ссылки на Specs, `.proto`, README и AGENTS.md.
 
-## 11. Поддержание актуальности
-
-После архивации изменения:
-
-1. обновить разделы 1–9 под фактическое состояние кода (новые каталоги, срезы, сущности, миграции,
-   соглашения);
-2. добавить строку в таблицу раздела 10;
-3. удалить описания того, что было удалено или переименовано;
-4. проверить, что упомянутые пути существуют и ссылки на ADR/спеки указывают на актуальные разделы.
-
-Требования и правила в этот файл не переносятся — здесь фиксируется только фактическая организация
-кода.
+OpenSpec Change и его архив содержат контекст изменения, рассмотренные варианты, задачи и историю.
+`ARCHITECTURE.md` не ведёт собственный журнал версий и не заменяет OpenSpec Archive.

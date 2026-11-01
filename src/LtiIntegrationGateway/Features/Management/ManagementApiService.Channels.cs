@@ -14,7 +14,7 @@ namespace LtiIntegrationGateway.Features.Management;
 /// <summary>Операции каналов через управляющий API.</summary>
 public sealed partial class ManagementApiService
 {
-    public override async Task<ChannelOperationResponse> CreateChannel(
+    public override async Task<ChannelOperationResponse> CreateOutboundChannel(
         CreateChannelRequest request,
         ServerCallContext context)
     {
@@ -47,7 +47,7 @@ public sealed partial class ManagementApiService
         return ToChannelResponse(succeeded, result.Problems, result.ChannelId, result.RevisionNumber);
     }
 
-    public override async Task<ChannelOperationResponse> UpdateChannelDraft(
+    public override async Task<ChannelOperationResponse> UpdateOutboundChannelDraft(
         UpdateChannelDraftRequest request,
         ServerCallContext context)
     {
@@ -90,7 +90,7 @@ public sealed partial class ManagementApiService
         return ToChannelResponse(succeeded, result.Problems, channelId, result.RevisionNumber);
     }
 
-    public override async Task<ChannelOperationResponse> PublishChannelRevision(
+    public override async Task<ChannelOperationResponse> PublishOutboundChannelRevision(
         PublishChannelRevisionRequest request,
         ServerCallContext context)
     {
@@ -116,7 +116,7 @@ public sealed partial class ManagementApiService
         return ToChannelResponse(succeeded, result.Problems, channelId, result.RevisionNumber, result.Warnings);
     }
 
-    public override async Task<ChannelOperationResponse> ActivateChannelRevision(
+    public override async Task<ChannelOperationResponse> ActivateOutboundChannelRevision(
         ActivateChannelRevisionRequest request,
         ServerCallContext context)
     {
@@ -142,7 +142,7 @@ public sealed partial class ManagementApiService
         return ToChannelResponse(succeeded, result.Problems, channelId, result.RevisionNumber);
     }
 
-    public override async Task<ChannelOperationResponse> RollbackChannelRevision(
+    public override async Task<ChannelOperationResponse> RollbackOutboundChannelRevision(
         RollbackChannelRevisionRequest request,
         ServerCallContext context)
     {
@@ -168,7 +168,7 @@ public sealed partial class ManagementApiService
         return ToChannelResponse(succeeded, result.Problems, channelId, result.RevisionNumber);
     }
 
-    public override async Task<GetChannelHealthResponse> GetChannelHealth(
+    public override async Task<GetChannelHealthResponse> GetOutboundChannelHealth(
         GetChannelHealthRequest request,
         ServerCallContext context)
     {

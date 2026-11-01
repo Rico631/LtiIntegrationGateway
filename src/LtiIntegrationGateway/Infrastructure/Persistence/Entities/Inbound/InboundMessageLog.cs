@@ -6,11 +6,20 @@ public enum InboundDeliveryStatus
     /// <summary>Сообщение принято, передача ещё не подтверждена.</summary>
     Pending = 1,
 
-    /// <summary>Сообщение передано в очередь получателя.</summary>
+    /// <summary>Сообщение передано в очередь получателя; ответ не ожидается.</summary>
     Sent = 2,
 
-    /// <summary>Передать сообщение не удалось.</summary>
-    Failed = 3,
+    /// <summary>Получен и сохранён ответ продукта.</summary>
+    Replied = 3,
+
+    /// <summary>Ответ продукта не получен до истечения таймаута.</summary>
+    TimedOut = 4,
+
+    /// <summary>Ожидание ответа отменено клиентом.</summary>
+    Cancelled = 5,
+
+    /// <summary>Передать сообщение не удалось или ответ продукта некорректен.</summary>
+    Failed = 6,
 }
 
 /// <summary>Журнал входящих вызовов: тело, маршрут, операция, статус передачи.</summary>
@@ -54,6 +63,18 @@ public sealed class InboundMessageLog : IEntity
 
     /// <summary>Код ошибки при отклонении вызова; пусто для принятого вызова.</summary>
     public string? ErrorCode { get; set; }
+
+    /// <summary>HTTP-статус ответа продукта; заполняется для синхронного режима.</summary>
+    public int? ResponseStatusCode { get; set; }
+
+    /// <summary>Тип содержимого ответа продукта.</summary>
+    public string? ResponseContentType { get; set; }
+
+    /// <summary>Тело ответа продукта в исходном виде.</summary>
+    public byte[] ResponseBody { get; set; } = [];
+
+    /// <summary>Заголовки ответа продукта в виде JSON-массива пар имя/значение.</summary>
+    public string? ResponseHeaders { get; set; }
 
     /// <summary>
     /// Момент приёма вызова; в хранилище кодируется миллисекундами Unix, чтобы SQLite мог

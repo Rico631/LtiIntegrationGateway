@@ -27,9 +27,9 @@ public class ContractRegistryTests
             },
         }));
 
-    private static async Task CreateChannelAsync(HttpClient client, string name)
+    private static async Task CreateOutboundChannelAsync(HttpClient client, string name)
     {
-        var response = await client.PostAsync("/v1/channels", ChannelBody(name));
+        var response = await client.PostAsync($"/test/inbound-channels?name={Uri.EscapeDataString(name)}", content: null);
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
     }
@@ -38,7 +38,7 @@ public class ContractRegistryTests
         ManagementService.ManagementServiceClient client,
         string channelName,
         string document) =>
-        await client.UploadContractAsync(
+        await client.UploadInboundContractVersionAsync(
             new UploadContractRequest { ChannelName = channelName, Document = document },
             ManagementApi.Call());
 
@@ -47,10 +47,10 @@ public class ContractRegistryTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http, "bank-a");
+        await CreateOutboundChannelAsync(http, "bank-a");
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         var upload = await UploadAsync(grpc, "bank-a", OpenApiSamples.OpenApi30WithPath("POST", "/callbacks/contracts"));
 
@@ -64,10 +64,10 @@ public class ContractRegistryTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http, "bank-a");
+        await CreateOutboundChannelAsync(http, "bank-a");
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         var upload = await UploadAsync(grpc, "bank-a", OpenApiSamples.Swagger20);
 
@@ -87,10 +87,10 @@ public class ContractRegistryTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http, "bank-a");
+        await CreateOutboundChannelAsync(http, "bank-a");
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         var upload = await UploadAsync(grpc, "bank-a", OpenApiSamples.OpenApi31);
 
@@ -103,10 +103,10 @@ public class ContractRegistryTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http, "bank-a");
+        await CreateOutboundChannelAsync(http, "bank-a");
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         var external = await UploadAsync(grpc, "bank-a", OpenApiSamples.ExternalReference);
         var forbidden = await UploadAsync(grpc, "bank-a", OpenApiSamples.ForbiddenKeyword);
@@ -122,10 +122,10 @@ public class ContractRegistryTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http, "bank-a");
+        await CreateOutboundChannelAsync(http, "bank-a");
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         var upload = await UploadAsync(grpc, "bank-a", OpenApiSamples.UnknownFormat);
 

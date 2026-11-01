@@ -26,7 +26,7 @@ public sealed class UploadContractVersionHandler(
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var channel = await db.Channels
+        var channel = await db.InboundChannels
             .SingleOrDefaultAsync(entity => entity.Name == command.ChannelName, cancellationToken);
 
         if (channel is null)
@@ -51,13 +51,13 @@ public sealed class UploadContractVersionHandler(
         }
 
         var nextVersion = (await db.ContractVersions
-            .Where(version => version.ChannelId == channel.Id)
+            .Where(version => version.InboundChannelId == channel.Id)
             .MaxAsync(version => (int?)version.Version, cancellationToken) ?? 0) + 1;
 
         db.ContractVersions.Add(new ContractVersion
         {
             Id = Guid.NewGuid(),
-            ChannelId = channel.Id,
+            InboundChannelId = channel.Id,
             Version = nextVersion,
             SourceFormat = read.Format == OpenApiSourceFormat.Swagger20
                 ? ContractSourceFormat.Swagger20

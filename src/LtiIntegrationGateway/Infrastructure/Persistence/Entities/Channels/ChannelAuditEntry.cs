@@ -6,6 +6,9 @@ public sealed class ChannelAuditEntry : IEntity
     /// <summary>Уникальный идентификатор записи.</summary>
     public Guid Id { get; set; }
 
+    /// <summary>Направление канала, которому принадлежит запись.</summary>
+    public ChannelDirection Direction { get; set; }
+
     /// <summary>Идентификатор канала.</summary>
     public Guid ChannelId { get; set; }
 

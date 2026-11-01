@@ -22,10 +22,10 @@ public class ContractPublishQueueTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http);
+        await CreateOutboundChannelAsync(http);
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         await UploadAsync(grpc, DocumentWithOperation);
         await SetVersionQueueAsync(grpc, 1, "dpv.inbox");
@@ -41,10 +41,10 @@ public class ContractPublishQueueTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http);
+        await CreateOutboundChannelAsync(http);
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         await UploadAsync(grpc, DocumentWithOperation);
         await SetVersionQueueAsync(grpc, 1, "inbound.queue");

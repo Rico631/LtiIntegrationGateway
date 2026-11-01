@@ -18,20 +18,20 @@ public class InboundDisabledOperationTests
 
     private static async Task<ManagementService.ManagementServiceClient> PrepareActiveVersionAsync(
         GatewayWebApplicationFactory factory,
-        GrpcChannel channel,
+        GrpcChannel OutboundChannel,
         bool withApiKeyAuth = false,
         string path = Path)
     {
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http);
+        await CreateOutboundChannelAsync(http);
 
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         await UploadAsync(grpc, Document(("POST", path, "receiveContract")));
 
         if (withApiKeyAuth)
         {
-            var settings = await grpc.UpdateContractVersionSettingsAsync(
+            var settings = await grpc.UpdateInboundContractVersionSettingsAsync(
                 new UpdateContractVersionSettingsRequest
                 {
                     ChannelName = ChannelName,
@@ -70,8 +70,8 @@ public class InboundDisabledOperationTests
         var longPath = "/callbacks/" + new string('a', 300);
 
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = await PrepareActiveVersionAsync(factory, channel, path: longPath);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = await PrepareActiveVersionAsync(factory, OutboundChannel, path: longPath);
 
         var disabled = await PatchAsync(grpc, 1, "receiveContract", enabled: false);
 
@@ -96,8 +96,8 @@ public class InboundDisabledOperationTests
         var longPath = "/callbacks/" + new string('b', 2100);
 
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = await PrepareActiveVersionAsync(factory, channel, path: template);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = await PrepareActiveVersionAsync(factory, OutboundChannel, path: template);
 
         var disabled = await PatchAsync(grpc, 1, "receiveContract", enabled: false);
 
@@ -129,8 +129,8 @@ public class InboundDisabledOperationTests
     public async Task Disabled_operation_answers_not_found_and_is_audited()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = await PrepareActiveVersionAsync(factory, channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = await PrepareActiveVersionAsync(factory, OutboundChannel);
 
         using var http = ManagementApi.CreateClient(factory);
 
@@ -170,8 +170,8 @@ public class InboundDisabledOperationTests
     public async Task Disabled_operation_does_not_authenticate()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = await PrepareActiveVersionAsync(factory, channel, withApiKeyAuth: true);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = await PrepareActiveVersionAsync(factory, OutboundChannel, withApiKeyAuth: true);
 
         var disabled = await PatchAsync(grpc, 1, "receiveContract", enabled: false);
 
@@ -189,8 +189,8 @@ public class InboundDisabledOperationTests
     public async Task Enabling_operation_restores_serving_without_restart()
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = await PrepareActiveVersionAsync(factory, channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = await PrepareActiveVersionAsync(factory, OutboundChannel);
 
         using var http = ManagementApi.CreateClient(factory);
 

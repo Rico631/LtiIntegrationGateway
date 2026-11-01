@@ -65,10 +65,10 @@ public sealed class UpdateContractOperationSettingsHandler(
         var target = $"{command.ChannelName}:v{command.Version}:{command.OperationId}";
 
         var version = await db.ContractVersions
-            .Include(entity => entity.Channel)
+            .Include(entity => entity.InboundChannel)
             .Include(entity => entity.Operations)
             .SingleOrDefaultAsync(
-                entity => entity.Channel!.Name == command.ChannelName && entity.Version == command.Version,
+                entity => entity.InboundChannel!.Name == command.ChannelName && entity.Version == command.Version,
                 cancellationToken);
 
         if (version is null)
@@ -197,7 +197,7 @@ public sealed class UpdateContractOperationSettingsHandler(
     private InboundRouteSet BuildSet(ContractVersion version) =>
         ContractRouteSets.Build(
             version.Id,
-            version.Channel!.Name,
+            version.InboundChannel!.Name,
             version.Operations,
             ContractVersionSettings.From(version),
             rateLimitOptions.Value);

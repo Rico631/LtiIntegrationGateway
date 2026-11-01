@@ -41,5 +41,6 @@ public static class RebusConfigurationExtensions
 
         options.RetryStrategy(errorQueueName: QueueNames.ErrorQueue);
         options.EnableDiagnosticSources();
+        options.EnableSynchronousRequestReply();
     }
 }

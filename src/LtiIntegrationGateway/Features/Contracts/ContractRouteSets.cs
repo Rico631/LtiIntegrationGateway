@@ -1,4 +1,5 @@
 using LtiIntegrationGateway.Infrastructure.OpenApi;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts;
 using LtiIntegrationGateway.Infrastructure.Routing;
 
@@ -19,7 +20,9 @@ public static class ContractRouteSets
         string channelName,
         IEnumerable<ContractOperation> operations,
         ContractVersionSettings settings,
-        InboundRateLimitOptions applicationDefaults)
+        InboundRateLimitOptions applicationDefaults,
+        InboundResponseMode responseMode = InboundResponseMode.Async,
+        int inboundResponseTimeoutMs = 30_000)
     {
         ArgumentNullException.ThrowIfNull(operations);
         ArgumentNullException.ThrowIfNull(settings);
@@ -28,7 +31,14 @@ public static class ContractRouteSets
         return new InboundRouteSet(
             RevisionKey(contractVersionId),
             operations
-                .Select(operation => CreateRoute(channelName, contractVersionId, operation, settings, applicationDefaults))
+                .Select(operation => CreateRoute(
+                    channelName,
+                    contractVersionId,
+                    operation,
+                    settings,
+                    applicationDefaults,
+                    responseMode,
+                    inboundResponseTimeoutMs))
                 .ToArray());
     }
 
@@ -47,7 +57,9 @@ public static class ContractRouteSets
         Guid contractVersionId,
         ContractOperation operation,
         ContractVersionSettings settings,
-        InboundRateLimitOptions applicationDefaults)
+        InboundRateLimitOptions applicationDefaults,
+        InboundResponseMode responseMode,
+        int inboundResponseTimeoutMs)
     {
         var effective = ContractOperationSettings.Resolve(operation, settings, applicationDefaults);
 
@@ -64,7 +76,9 @@ public static class ContractRouteSets
             settings.UserName,
             effective.RateLimitPermit,
             effective.RateLimitWindowSeconds,
-            effective.Enabled);
+            effective.Enabled,
+            responseMode,
+            inboundResponseTimeoutMs);
     }
 }
 

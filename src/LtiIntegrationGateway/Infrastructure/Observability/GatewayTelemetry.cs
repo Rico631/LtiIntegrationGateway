@@ -66,6 +66,9 @@ public static class GatewayTelemetry
     /// <summary>Имя тега безопасного кода ошибки.</summary>
     public const string ErrorCodeTag = "error_code";
 
+    /// <summary>Режим ответа входящего канала: async или sync; не содержит payload.</summary>
+    public const string InboundResponseModeTag = "inbound.response_mode";
+
     /// <summary>Имя тега HTTP-статуса ответа.</summary>
     public const string HttpStatusCodeTag = "http.response.status_code";
 

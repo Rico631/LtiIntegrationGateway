@@ -69,7 +69,9 @@ public sealed class InboundEndpointDataSource(
             route.HeaderName,
             route.UserName,
             route.RateLimitPermit,
-            route.RateLimitWindowSeconds));
+            route.RateLimitWindowSeconds,
+            route.ResponseMode,
+            route.InboundResponseTimeoutMs));
         builder.Metadata.Add(new EnableRateLimitingAttribute(InboundRateLimit.PolicyName));
 
         return builder.Build();

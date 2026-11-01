@@ -49,17 +49,17 @@ public class ChannelHealthApiTests
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
 
-        var channel = new Channel
+        var OutboundChannel = new OutboundChannel
         {
             Id = Guid.NewGuid(),
             Name = ChannelName,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
-        channel.Revisions.Add(new ChannelRevision
+        OutboundChannel.Revisions.Add(new ChannelRevision
         {
             Id = Guid.NewGuid(),
-            ChannelId = channel.Id,
+            OutboundChannelId = OutboundChannel.Id,
             Number = 1,
             Status = status,
             BaseUrl = "https://bank-a.example",
@@ -70,7 +70,7 @@ public class ChannelHealthApiTests
             CreatedAt = DateTimeOffset.UtcNow,
         });
 
-        db.Channels.Add(channel);
+        db.OutboundChannels.Add(OutboundChannel);
         await db.SaveChangesAsync();
     }
 
@@ -190,7 +190,7 @@ public class ChannelHealthApiTests
         HttpClient client,
         string channelName = ChannelName)
     {
-        var response = await client.GetAsync($"/v1/channels/{channelName}/health");
+        var response = await client.GetAsync($"/v1/outbound-channels/{channelName}/health");
         var text = await response.Content.ReadAsStringAsync();
 
         using var document = JsonDocument.Parse(text);
@@ -242,7 +242,6 @@ public class ChannelHealthApiTests
         using var client = ManagementApi.CreateClient(factory);
 
         await SeedChannelAsync(factory, ChannelAuthType.Bearer, ConfigKey, ChannelRevisionStatus.Draft);
-        await AddInboundErrorsAsync(factory, 1);
 
         var (status, _, body) = await GetHealthAsync(client);
 
@@ -250,7 +249,7 @@ public class ChannelHealthApiTests
         await Assert.That(body.GetProperty("state").GetString()).IsEqualTo("NO_ACTIVE_REVISION");
         await Assert.That(body.GetProperty("activeRevision").GetInt32()).IsEqualTo(0);
         await Assert.That(body.GetProperty("secretConfigured").GetBoolean()).IsFalse();
-        await Assert.That(body.GetProperty("errors").GetArrayLength()).IsEqualTo(1);
+        await Assert.That(body.GetProperty("errors").GetArrayLength()).IsEqualTo(0);
     }
 
     [Test]
@@ -263,11 +262,11 @@ public class ChannelHealthApiTests
 
         await Assert.That(status).IsEqualTo(HttpStatusCode.NotFound);
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpcClient = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpcClient = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         var exception = await Assert.ThrowsAsync<RpcException>(async () =>
-            await grpcClient.GetChannelHealthAsync(
+            await grpcClient.GetOutboundChannelHealthAsync(
                 new GetChannelHealthRequest { ChannelName = "missing" },
                 ManagementApi.Call()));
 
@@ -282,7 +281,6 @@ public class ChannelHealthApiTests
 
         await SeedChannelAsync(factory);
         await AddOutboundErrorsAsync(factory, 7);
-        await AddInboundErrorsAsync(factory, 2);
 
         var (status, text, body) = await GetHealthAsync(client);
         var errors = body.GetProperty("errors").EnumerateArray().ToArray();
@@ -291,15 +289,11 @@ public class ChannelHealthApiTests
         await Assert.That(errors.Count(entry => entry.GetProperty("direction").GetString() == "outbound"))
             .IsEqualTo(5);
         await Assert.That(errors.Count(entry => entry.GetProperty("direction").GetString() == "inbound"))
-            .IsEqualTo(2);
+            .IsEqualTo(0);
         await Assert.That(errors[0].GetProperty("errorCode").GetString()).IsEqualTo("OUT-0");
         await Assert.That(errors[0].GetProperty("httpStatus").GetInt32()).IsEqualTo(502);
         await Assert.That(errors[0].GetProperty("outcome").GetString()).IsEqualTo("HTTP_RESPONSE");
         await Assert.That(errors[0].GetProperty("occurredAt").GetString()).IsNotNull();
-        await Assert.That(errors
-            .Where(entry => entry.GetProperty("direction").GetString() == "inbound")
-            .All(entry => entry.GetProperty("httpStatus").GetInt32() == 0 &&
-                          entry.GetProperty("outcome").GetString() == string.Empty)).IsTrue();
         await Assert.That(text.Contains(BodyMarker, StringComparison.Ordinal)).IsFalse();
     }
 
@@ -352,11 +346,9 @@ public class ChannelHealthApiTests
 
         await Assert.That(status).IsEqualTo(HttpStatusCode.OK);
         await Assert.That(outbound.Length).IsEqualTo(5);
-        await Assert.That(inbound.Length).IsEqualTo(5);
+        await Assert.That(inbound.Length).IsEqualTo(0);
         await Assert.That(string.Join(",", outbound))
             .IsEqualTo(string.Join(",", latest.Select(index => $"OUT-{index}")));
-        await Assert.That(string.Join(",", inbound))
-            .IsEqualTo(string.Join(",", latest.Select(index => $"IN-{index}")));
     }
 
     [Test]
@@ -425,9 +417,9 @@ public class ChannelHealthApiTests
 
         var (_, _, body) = await GetHealthAsync(client);
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpcClient = new ManagementService.ManagementServiceClient(channel);
-        var grpcResponse = await grpcClient.GetChannelHealthAsync(
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpcClient = new ManagementService.ManagementServiceClient(OutboundChannel);
+        var grpcResponse = await grpcClient.GetOutboundChannelHealthAsync(
             new GetChannelHealthRequest { ChannelName = ChannelName },
             ManagementApi.Call());
 

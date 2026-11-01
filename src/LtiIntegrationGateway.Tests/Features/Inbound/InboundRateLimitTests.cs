@@ -20,10 +20,10 @@ public class InboundRateLimitTests
 
     private static InboundRouteSet Set(
         string revisionKey,
-        params (string Channel, string Method, string Template)[] routes) =>
+        params (string OutboundChannel, string Method, string Template)[] routes) =>
         new(revisionKey, routes
             .Select(route => new InboundRouteDefinition(
-                route.Channel,
+                route.OutboundChannel,
                 route.Method,
                 route.Template,
                 RecipientQueue: RecipientQueue))
@@ -33,10 +33,10 @@ public class InboundRateLimitTests
         string revisionKey,
         int permitLimit,
         int windowSeconds,
-        params (string Channel, string Method, string Template)[] routes) =>
+        params (string OutboundChannel, string Method, string Template)[] routes) =>
         new(revisionKey, routes
             .Select(route => new InboundRouteDefinition(
-                route.Channel,
+                route.OutboundChannel,
                 route.Method,
                 route.Template,
                 RecipientQueue: RecipientQueue,

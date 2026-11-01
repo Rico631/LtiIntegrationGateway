@@ -31,10 +31,10 @@ public sealed class PublishContractVersionHandler(
         ArgumentNullException.ThrowIfNull(command);
 
         var version = await db.ContractVersions
-            .Include(entity => entity.Channel)
+            .Include(entity => entity.InboundChannel)
             .Include(entity => entity.Operations)
             .SingleOrDefaultAsync(
-                entity => entity.Channel!.Name == command.ChannelName && entity.Version == command.Version,
+                entity => entity.InboundChannel!.Name == command.ChannelName && entity.Version == command.Version,
                 cancellationToken);
 
         var target = $"{command.ChannelName}:v{command.Version}";
@@ -92,7 +92,7 @@ public sealed class PublishContractVersionHandler(
             problems.AddRange(FindDuplicateOperationIds(read.Operations));
 
             var activeSets = await LoadOtherActiveSetsAsync(version, cancellationToken);
-            var candidate = ContractRouteSets.Build(version.Id, version.Channel!.Name, read.Operations);
+            var candidate = ContractRouteSets.Build(version.Id, version.InboundChannel!.Name, read.Operations);
 
             problems.AddRange(routeValidator.Validate(candidate, activeSets));
         }
@@ -133,7 +133,7 @@ public sealed class PublishContractVersionHandler(
             .AsNoTracking()
             .Include(entity => entity.Operations)
             .Where(entity =>
-                entity.ChannelId == version.ChannelId &&
+                entity.InboundChannelId == version.InboundChannelId &&
                 entity.Version < version.Version &&
                 entity.Status != ContractVersionStatus.Draft)
             .OrderByDescending(entity => entity.Version)
@@ -220,15 +220,15 @@ public sealed class PublishContractVersionHandler(
     {
         var activeVersions = await db.ContractVersions
             .AsNoTracking()
-            .Include(entity => entity.Channel)
+            .Include(entity => entity.InboundChannel)
             .Include(entity => entity.Operations)
-            .Where(entity => entity.Status == ContractVersionStatus.Active && entity.ChannelId != version.ChannelId)
+            .Where(entity => entity.Status == ContractVersionStatus.Active && entity.InboundChannelId != version.InboundChannelId)
             .ToListAsync(cancellationToken);
 
         return activeVersions
             .Select(active => ContractRouteSets.Build(
                 active.Id,
-                active.Channel!.Name,
+                active.InboundChannel!.Name,
                 active.Operations,
                 ContractVersionSettings.From(active),
                 rateLimitOptions.Value))

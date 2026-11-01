@@ -66,4 +66,45 @@ public sealed class InboundMessageLogWriter(IServiceScopeFactory scopeFactory, I
             logger.LogError(exception, "Не удалось обновить статус входящего вызова в журнале");
         }
     }
+    /// <summary>
+    /// Обновляет ту же запись журнала ответом продукта или сведениями об ошибке синхронного
+    /// ожидания; сбой обновления не прерывает обработку вызова.
+    /// </summary>
+    public async Task UpdateResponseAsync(
+        Guid? entryId,
+        InboundDeliveryStatus status,
+        int? responseStatusCode,
+        string? responseContentType,
+        byte[] responseBody,
+        string? responseHeaders,
+        string? errorCode,
+        CancellationToken cancellationToken = default)
+    {
+        if (entryId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
+
+            await db.InboundMessageLogs
+                .Where(entry => entry.Id == entryId)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(entry => entry.DeliveryStatus, status)
+                        .SetProperty(entry => entry.ResponseStatusCode, responseStatusCode)
+                        .SetProperty(entry => entry.ResponseContentType, responseContentType)
+                        .SetProperty(entry => entry.ResponseBody, responseBody)
+                        .SetProperty(entry => entry.ResponseHeaders, responseHeaders)
+                        .SetProperty(entry => entry.ErrorCode, errorCode),
+                    cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogError(exception, "Не удалось обновить ответ входящего вызова в журнале");
+        }
+    }
 }

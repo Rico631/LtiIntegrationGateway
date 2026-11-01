@@ -1,5 +1,7 @@
 using LtiIntegrationGateway.Features.ProductRoutes;
 using LtiIntegrationGateway.Features.ProductRoutes.GetProductRoute;
+using LtiIntegrationGateway.Infrastructure.Persistence;
+using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRoutes;
 using LtiIntegrationGateway.Tests.TestSupport;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +17,21 @@ public class ProductRouteRegistrationTests
     private const string ProductId = "dpv";
     private const string ChannelName = "bank-a";
 
+    private static async Task AddOutboundChannelAsync(GatewayDbContext db)
+    {
+        if (!await db.OutboundChannels.AnyAsync(channel => channel.Name == ChannelName))
+        {
+            db.OutboundChannels.Add(new OutboundChannel
+            {
+                Id = Guid.NewGuid(),
+                Name = ChannelName,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+
+            await db.SaveChangesAsync();
+        }
+    }
+
     [Test]
     public async Task Registration_without_address_saves_computed_inbox()
     {
@@ -23,6 +40,8 @@ public class ProductRouteRegistrationTests
 
         using (var db = database.CreateContext())
         {
+            await AddOutboundChannelAsync(db);
+
             var result = await new RegisterProductRouteHandler(db).HandleAsync(
                 new RegisterProductRouteCommand(ProductId, [ChannelName], []));
 
@@ -45,6 +64,8 @@ public class ProductRouteRegistrationTests
 
         using (var db = database.CreateContext())
         {
+            await AddOutboundChannelAsync(db);
+
             var result = await new RegisterProductRouteHandler(db).HandleAsync(
                 new RegisterProductRouteCommand(ProductId, [ChannelName], ["dpv.inbox"]));
 
@@ -67,6 +88,8 @@ public class ProductRouteRegistrationTests
 
         using (var db = database.CreateContext())
         {
+            await AddOutboundChannelAsync(db);
+
             await new RegisterProductRouteHandler(db).HandleAsync(
                 new RegisterProductRouteCommand(ProductId, [ChannelName], []));
         }
@@ -86,7 +109,7 @@ public class ProductRouteRegistrationTests
             .Include(entity => entity.AllowedQueueAddresses)
             .SingleAsync();
 
-        await Assert.That(route.AllowedChannels.Select(channel => channel.ChannelName).ToArray())
+        await Assert.That(route.AllowedChannels.Select(OutboundChannel => OutboundChannel.ChannelName).ToArray())
             .IsEquivalentTo(new[] { ChannelName });
         await Assert.That(route.AllowedQueueAddresses.Select(address => address.Address).ToArray())
             .IsEquivalentTo(new[] { "dpv.inbox" });

@@ -53,26 +53,26 @@ service ManagementService {
   //
   // Для каждого канала отдаются настройки активной ревизии (если она есть) и перечень всех ревизий
   // с номерами и состояниями. Доменных отказов не бывает: пустой список — валидный результат.
-  // REST: GET /v1/channels
-  rpc ListChannels (ListChannelsRequest) returns (ListChannelsResponse) {
-    option (google.api.http) = { get: "/v1/channels" };
+  // REST: GET /v1/outbound-channels
+  rpc ListOutboundChannels (ListChannelsRequest) returns (ListChannelsResponse) {
+    option (google.api.http) = { get: "/v1/outbound-channels" };
   }
 
   // Создаёт канал вместе с черновой ревизией с номером 1.
   //
   // Имя канала уникально. Отказ возвращается в problems, если имя занято, не заполнено или настройки
   // ревизии не проходят проверки. Созданный канал не имеет активной ревизии до публикации и активации.
-  // REST: POST /v1/channels
-  rpc CreateChannel (CreateChannelRequest) returns (ChannelOperationResponse) {
-    option (google.api.http) = { post: "/v1/channels" body: "*" };
+  // REST: POST /v1/outbound-channels
+  rpc CreateOutboundChannel (CreateChannelRequest) returns (ChannelOperationResponse) {
+    option (google.api.http) = { post: "/v1/outbound-channels" body: "*" };
   }
 
   // Возвращает канал по имени вместе с активной ревизией и перечнем ревизий.
   //
   // Если канал не найден, возвращается gRPC NotFound (REST 404).
-  // REST: GET /v1/channels/{channel_name}
-  rpc GetChannel (GetChannelRequest) returns (GetChannelResponse) {
-    option (google.api.http) = { get: "/v1/channels/{channel_name}" };
+  // REST: GET /v1/outbound-channels/{channel_name}
+  rpc GetOutboundChannel (GetChannelRequest) returns (GetChannelResponse) {
+    option (google.api.http) = { get: "/v1/outbound-channels/{channel_name}" };
   }
 
   // Возвращает состояние канала: наличие активной ревизии, признак настроенного секрета, срок
@@ -83,9 +83,9 @@ service ManagementService {
   // состоянием NO_ACTIVE_REVISION и остальной диагностикой. Если канал не найден, возвращается
   // gRPC NotFound (REST 404). Операция только читает данные и фиксируется в аудите управляющих
   // операций; значения секретов, тела сообщений и заголовки в ответ не попадают.
-  // REST: GET /v1/channels/{channel_name}/health
-  rpc GetChannelHealth (GetChannelHealthRequest) returns (GetChannelHealthResponse) {
-    option (google.api.http) = { get: "/v1/channels/{channel_name}/health" };
+  // REST: GET /v1/outbound-channels/{channel_name}/health
+  rpc GetOutboundChannelHealth (GetChannelHealthRequest) returns (GetChannelHealthResponse) {
+    option (google.api.http) = { get: "/v1/outbound-channels/{channel_name}/health" };
   }
 
   // Изменяет настройки черновика канала.
@@ -93,35 +93,35 @@ service ManagementService {
   // Ревизия с номером revision должна быть черновиком: опубликованная ревизия не изменяется, попытка
   // возвращает отказ в problems. Если revision = 0, используется существующий черновик, а при его
   // отсутствии создаётся новый черновик со следующим номером. Активная ревизия не затрагивается.
-  // REST: PATCH /v1/channels/{channel_name}/draft
-  rpc UpdateChannelDraft (UpdateChannelDraftRequest) returns (ChannelOperationResponse) {
-    option (google.api.http) = { patch: "/v1/channels/{channel_name}/draft" body: "*" };
+  // REST: PATCH /v1/outbound-channels/{channel_name}/draft
+  rpc UpdateOutboundChannelDraft (UpdateChannelDraftRequest) returns (ChannelOperationResponse) {
+    option (google.api.http) = { patch: "/v1/outbound-channels/{channel_name}/draft" body: "*" };
   }
   // Публикует черновик как неизменяемую ревизию.
   //
   // Настройки проверяются полностью; при проблемах возвращается их полный список, а активная ревизия
   // не меняется. Если revision = 0, публикуется текущий черновик.
-  // REST: POST /v1/channels/{channel_name}/revisions/{revision}/publish
-  rpc PublishChannelRevision (PublishChannelRevisionRequest) returns (ChannelOperationResponse) {
-    option (google.api.http) = { post: "/v1/channels/{channel_name}/revisions/{revision}/publish" };
+  // REST: POST /v1/outbound-channels/{channel_name}/revisions/{revision}/publish
+  rpc PublishOutboundChannelRevision (PublishChannelRevisionRequest) returns (ChannelOperationResponse) {
+    option (google.api.http) = { post: "/v1/outbound-channels/{channel_name}/revisions/{revision}/publish" };
   }
 
   // Делает опубликованную ревизию активной конфигурацией канала.
   //
   // Предыдущая активная ревизия переходит в состояние Superseded; одновременно активна только одна
   // ревизия канала. Отказ возвращается в problems, если ревизия не опубликована или не найдена.
-  // REST: POST /v1/channels/{channel_name}/revisions/{revision}/activate
-  rpc ActivateChannelRevision (ActivateChannelRevisionRequest) returns (ChannelOperationResponse) {
-    option (google.api.http) = { post: "/v1/channels/{channel_name}/revisions/{revision}/activate" };
+  // REST: POST /v1/outbound-channels/{channel_name}/revisions/{revision}/activate
+  rpc ActivateOutboundChannelRevision (ActivateChannelRevisionRequest) returns (ChannelOperationResponse) {
+    option (google.api.http) = { post: "/v1/outbound-channels/{channel_name}/revisions/{revision}/activate" };
   }
 
   // Возвращает активность предыдущей опубликованной ревизии канала.
   //
   // Используется для отката неудачного изменения конфигурации. Если откатывать некуда, отказ
   // возвращается в problems.
-  // REST: POST /v1/channels/{channel_name}/rollback
-  rpc RollbackChannelRevision (RollbackChannelRevisionRequest) returns (ChannelOperationResponse) {
-    option (google.api.http) = { post: "/v1/channels/{channel_name}/rollback" };
+  // REST: POST /v1/outbound-channels/{channel_name}/rollback
+  rpc RollbackOutboundChannelRevision (RollbackChannelRevisionRequest) returns (ChannelOperationResponse) {
+    option (google.api.http) = { post: "/v1/outbound-channels/{channel_name}/rollback" };
   }
 
   // Создаёт или полностью заменяет маршрут продукта.
@@ -150,9 +150,9 @@ service ManagementService {
   // конструкции, внешние ссылки и поля рядом с $ref дают отказ, неизвестный format — предупреждение.
   // Исходный документ сохраняется без изменений. Проблемы возвращаются в problems, предупреждения —
   // в warnings.
-  // REST: POST /v1/channels/{channel_name}/contracts
-  rpc UploadContract (UploadContractRequest) returns (ContractOperationResponse) {
-    option (google.api.http) = { post: "/v1/channels/{channel_name}/contracts" body: "*" };
+  // REST: POST /v1/inbound-channels/{channel_name}/contracts
+  rpc UploadInboundContractVersion (UploadContractRequest) returns (ContractOperationResponse) {
+    option (google.api.http) = { post: "/v1/inbound-channels/{channel_name}/contracts" body: "*" };
   }
 
   // Публикует версию контракта и фиксирует её операции.
@@ -160,9 +160,9 @@ service ManagementService {
   // Из документа извлекаются операции (HTTP-метод, шаблон пути, operationId). Публикация отклоняется
   // при повторяющемся operationId и при конфликте «метод + шаблон» с активными маршрутами других
   // каналов. Опубликованная версия неизменяема: повторная публикация возвращает отказ.
-  // REST: POST /v1/channels/{channel_name}/contracts/{version}/publish
-  rpc PublishContractVersion (PublishContractVersionRequest) returns (ContractOperationResponse) {
-    option (google.api.http) = { post: "/v1/channels/{channel_name}/contracts/{version}/publish" };
+  // REST: POST /v1/inbound-channels/{channel_name}/contracts/{version}/publish
+  rpc PublishInboundContractVersion (PublishContractVersionRequest) returns (ContractOperationResponse) {
+    option (google.api.http) = { post: "/v1/inbound-channels/{channel_name}/contracts/{version}/publish" };
   }
 
   // Активирует опубликованную версию контракта.
@@ -170,9 +170,9 @@ service ManagementService {
   // Маршруты версии регистрируются в каталоге входящих маршрутов и начинают обслуживаться без
   // перезапуска приложения; маршруты предыдущей активной версии канала снимаются. Если активация
   // отклонена, ранее активные маршруты продолжают работать.
-  // REST: POST /v1/channels/{channel_name}/contracts/{version}/activate
-  rpc ActivateContractVersion (ActivateContractVersionRequest) returns (ContractOperationResponse) {
-    option (google.api.http) = { post: "/v1/channels/{channel_name}/contracts/{version}/activate" };
+  // REST: POST /v1/inbound-channels/{channel_name}/contracts/{version}/activate
+  rpc ActivateInboundContractVersion (ActivateContractVersionRequest) returns (ContractOperationResponse) {
+    option (google.api.http) = { post: "/v1/inbound-channels/{channel_name}/contracts/{version}/activate" };
   }
 
   // Возвращает операции версии контракта с настройками приёма.
@@ -181,18 +181,18 @@ service ManagementService {
   // документе он не задан) и настройки операции: enabled и recipient_queue. Отсутствие
   // переопределения очереди выражается пустой строкой. Если версия не найдена, возвращается gRPC
   // NotFound.
-  // REST: GET /v1/channels/{channel_name}/contracts/{version}/operations
-  rpc ListContractOperations (ListContractOperationsRequest) returns (ListContractOperationsResponse) {
-    option (google.api.http) = { get: "/v1/channels/{channel_name}/contracts/{version}/operations" };
+  // REST: GET /v1/inbound-channels/{channel_name}/contracts/{version}/operations
+  rpc ListInboundContractOperations (ListContractOperationsRequest) returns (ListContractOperationsResponse) {
+    option (google.api.http) = { get: "/v1/inbound-channels/{channel_name}/contracts/{version}/operations" };
   }
 
   // Возвращает версию контракта с настройками входящих вызовов и перечнем операций.
   //
   // Настройки включают очередь получателя, тип авторизации с несекретными параметрами и квоту
   // частоты; значение секрета не возвращается. Если версия не найдена, возвращается gRPC NotFound.
-  // REST: GET /v1/channels/{channel_name}/contracts/{version}
-  rpc GetContractVersion (GetContractVersionRequest) returns (GetContractVersionResponse) {
-    option (google.api.http) = { get: "/v1/channels/{channel_name}/contracts/{version}" };
+  // REST: GET /v1/inbound-channels/{channel_name}/contracts/{version}
+  rpc GetInboundContractVersion (GetContractVersionRequest) returns (GetContractVersionResponse) {
+    option (google.api.http) = { get: "/v1/inbound-channels/{channel_name}/contracts/{version}" };
   }
 
   // Изменяет настройки входящих вызовов версии контракта.
@@ -200,9 +200,9 @@ service ManagementService {
   // Изменение допускается только для версии в состоянии черновика: опубликованная версия
   // неизменяема. Очередь получателя обязательна для публикации, но не для сохранения черновика.
   // Отказы возвращаются в problems с кодами version, auth_type, config_key, user_name, rate_limit.
-  // REST: PATCH /v1/channels/{channel_name}/contracts/{version}/settings
-  rpc UpdateContractVersionSettings (UpdateContractVersionSettingsRequest) returns (ContractOperationResponse) {
-    option (google.api.http) = { patch: "/v1/channels/{channel_name}/contracts/{version}/settings" body: "*" };
+  // REST: PATCH /v1/inbound-channels/{channel_name}/contracts/{version}/settings
+  rpc UpdateInboundContractVersionSettings (UpdateContractVersionSettingsRequest) returns (ContractOperationResponse) {
+    option (google.api.http) = { patch: "/v1/inbound-channels/{channel_name}/contracts/{version}/settings" body: "*" };
   }
 
   // Изменяет настройки одной операции версии контракта: признак обслуживания и очередь получателя.
@@ -215,12 +215,54 @@ service ManagementService {
   // settings, пустой path-параметр operation_id — проблема operation_id. Для активной версии
   // изменение применяется к работающим маршрутам без перезапуска; при отказе каталога маршрутов
   // действует прежний набор. Операция фиксируется в аудите управляющих операций.
-  // REST: PATCH /v1/channels/{channel_name}/contracts/{version}/operations/{operation_id}
-  rpc UpdateContractOperationSettings (UpdateContractOperationSettingsRequest) returns (ContractOperationResponse) {
-    option (google.api.http) = { patch: "/v1/channels/{channel_name}/contracts/{version}/operations/{operation_id}" body: "*" };
+  // REST: PATCH /v1/inbound-channels/{channel_name}/contracts/{version}/operations/{operation_id}
+  rpc UpdateInboundContractOperationSettings (UpdateContractOperationSettingsRequest) returns (ContractOperationResponse) {
+    option (google.api.http) = { patch: "/v1/inbound-channels/{channel_name}/contracts/{version}/operations/{operation_id}" body: "*" };
   }
 
-  // Возвращает состояние исходящей операции по идентификатору сообщения.
+  // Возвращает все входящие каналы в порядке имени.
+  //
+  // Доменных отказов не бывает: пустой список — валидный результат.
+  // REST: GET /v1/inbound-channels
+  rpc ListInboundChannels (ListInboundChannelsRequest) returns (ListInboundChannelsResponse) {
+    option (google.api.http) = { get: "/v1/inbound-channels" };
+  }
+
+  // Создаёт входящий канал вместе с черновиком первой версии OpenAPI-контракта.
+  //
+  // Имя уникально только среди входящих каналов; outbound-канал с таким же именем допустим.
+  // Документ обязателен и проверяется при создании. response_mode по умолчанию ASYNC,
+  // inbound_response_timeout_ms — 30000. Публикация и активация контракта выполняются отдельно.
+  // REST: POST /v1/inbound-channels
+  rpc CreateInboundChannel (CreateInboundChannelRequest) returns (InboundChannelOperationResponse) {
+    option (google.api.http) = { post: "/v1/inbound-channels" body: "*" };
+  }
+
+  // Возвращает входящий канал с настройками режима и перечнем версий контракта.
+  //
+  // Если канал не найден, возвращается gRPC NotFound (REST 404).
+  // REST: GET /v1/inbound-channels/{channel_name}
+  rpc GetInboundChannel (GetInboundChannelRequest) returns (GetInboundChannelResponse) {
+    option (google.api.http) = { get: "/v1/inbound-channels/{channel_name}" };
+  }
+
+  // Возвращает диагностическое состояние входящего канала: настройки, активный контракт и
+  // последние ошибки приёма. Значения секретов и тела сообщений не возвращаются.
+  // REST: GET /v1/inbound-channels/{channel_name}/health
+  rpc GetInboundChannelHealth (GetInboundChannelHealthRequest) returns (GetInboundChannelHealthResponse) {
+    option (google.api.http) = { get: "/v1/inbound-channels/{channel_name}/health" };
+  }
+
+  // Изменяет channel-level настройки входящего канала с аудитом.
+  //
+  // Передаются только изменяемые поля; отсутствующее поле остаётся без изменений. Новые значения
+  // применяются к последующим вызовам; уже начатые ожидания используют прежний snapshot.
+  // REST: PATCH /v1/inbound-channels/{channel_name}/settings
+  rpc UpdateInboundChannelSettings (UpdateInboundChannelSettingsRequest) returns (InboundChannelOperationResponse) {
+    option (google.api.http) = { patch: "/v1/inbound-channels/{channel_name}/settings" body: "*" };
+  }
+
+
   //
   // Отдаются состояние, исход, HTTP-статус, код ошибки, число попыток и адрес доставки результата.
   // Если операция не найдена, возвращается gRPC NotFound (REST 404).
@@ -362,6 +404,143 @@ message GetChannelResponse {
   // Канал с активными настройками и перечнем ревизий.
   ChannelInfo channel = 1;
 }
+
+// Режим ответа входящего канала.
+enum InboundResponseMode {
+  // Значение не задано; в запросе создания трактуется как ASYNC.
+  INBOUND_RESPONSE_MODE_UNSPECIFIED = 0;
+
+  // Шлюз отвечает 202 после передачи сообщения и не ждёт ответа продукта.
+  INBOUND_RESPONSE_MODE_ASYNC = 1;
+
+  // Шлюз ожидает InboundResponse и возвращает ответ продукта внешнему клиенту.
+  INBOUND_RESPONSE_MODE_SYNC = 2;
+}
+
+// Настройки входящего канала, действующие для всех его endpoints.
+message InboundChannelSettings {
+  // Режим ответа; в ответе всегда ASYNC или SYNC.
+  InboundResponseMode response_mode = 1;
+
+  // Таймаут ожидания InboundResponse в миллисекундах; положительное значение.
+  int32 inbound_response_timeout_ms = 2;
+}
+
+// Краткая информация о версии контракта входящего канала.
+message InboundContractVersionInfo {
+  // Номер версии внутри канала, начиная с 1.
+  int32 version = 1;
+
+  // Состояние версии: Draft, Published, Active или Superseded.
+  string status = 2;
+}
+
+// Входящий канал с настройками режима и перечнем версий контракта.
+message InboundChannelInfo {
+  // Идентификатор канала (Guid в строковом виде).
+  string channel_id = 1;
+
+  // Уникальное имя канала в пределах inbound-направления.
+  string name = 2;
+
+  // Настройки режима ответа и таймаута, действующие для канала.
+  InboundChannelSettings settings = 3;
+
+  // Номер активной версии контракта; 0 означает, что активной версии нет.
+  int32 active_contract_version = 4;
+
+  // Все версии контракта в порядке возрастания номера.
+  repeated InboundContractVersionInfo contract_versions = 5;
+}
+
+// Запрос списка входящих каналов. Параметров не требует.
+message ListInboundChannelsRequest {
+}
+
+// Ответ со списком входящих каналов, упорядоченным по имени.
+message ListInboundChannelsResponse {
+  // Входящие каналы; пустой список означает, что каналы ещё не созданы.
+  repeated InboundChannelInfo channels = 1;
+}
+
+// Запрос создания входящего канала с первым черновиком контракта.
+message CreateInboundChannelRequest {
+  // Уникальное имя входящего канала; имя outbound-канала не конфликтует с ним.
+  string name = 1;
+
+  // Обязательный документ OpenAPI/Swagger; проверяется до сохранения.
+  string document = 2;
+
+  // Режим ответа; отсутствие поля означает ASYNC.
+  optional InboundResponseMode response_mode = 3;
+
+  // Таймаут ожидания ответа в миллисекундах; отсутствие поля означает 30000.
+  optional int32 inbound_response_timeout_ms = 4;
+}
+
+// Результат операции над входящим каналом.
+message InboundChannelOperationResponse {
+  // Признак успеха операции.
+  bool succeeded = 1;
+
+  // Полный список проблем; пустой при успехе.
+  repeated OperationProblem problems = 2;
+
+  // Идентификатор канала; пустая строка, если канал не создан.
+  string channel_id = 3;
+
+  // Номер созданной или изменённой версии контракта; 0, если операция не затрагивает версию.
+  int32 contract_version = 4;
+}
+
+// Запрос входящего канала по имени.
+message GetInboundChannelRequest {
+  // Имя существующего входящего канала; отсутствие — gRPC NotFound.
+  string channel_name = 1;
+}
+
+// Ответ с данными входящего канала.
+message GetInboundChannelResponse {
+  // Входящий канал с настройками и версиями контракта.
+  InboundChannelInfo channel = 1;
+}
+
+// Запрос состояния входящего канала.
+message GetInboundChannelHealthRequest {
+  // Имя существующего входящего канала; отсутствие — gRPC NotFound.
+  string channel_name = 1;
+}
+
+// Состояние входящего канала: активный контракт и последние ошибки приёма.
+message GetInboundChannelHealthResponse {
+  // Имя канала; совпадает с channel_name запроса.
+  string channel_name = 1;
+
+  // Состояние: ACTIVE — активный контракт есть, NO_ACTIVE_CONTRACT — активного контракта нет.
+  string state = 2;
+
+  // Номер активной версии контракта; 0, если активной версии нет.
+  int32 active_contract_version = 3;
+
+  // Последние ошибки приёма, не более пяти, от новых к старым; тела и заголовки не возвращаются.
+  repeated ChannelHealthError errors = 4;
+
+  // Момент формирования ответа в UTC.
+  google.protobuf.Timestamp checked_at = 5;
+}
+
+// Запрос изменения channel-level настроек входящего канала.
+message UpdateInboundChannelSettingsRequest {
+  // Имя изменяемого входящего канала.
+  string channel_name = 1;
+
+  // Новый режим ответа; отсутствие поля означает сохранение текущего.
+  optional InboundResponseMode response_mode = 2;
+
+  // Новый таймаут в миллисекундах; отсутствие поля означает сохранение текущего.
+  optional int32 inbound_response_timeout_ms = 3;
+}
+
 
 // Запрос состояния канала.
 message GetChannelHealthRequest {

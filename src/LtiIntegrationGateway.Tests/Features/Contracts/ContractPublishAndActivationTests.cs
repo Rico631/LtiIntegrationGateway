@@ -1,5 +1,4 @@
 using System.Net;
-using System.Text.Json;
 using LtiIntegrationGateway.Contracts.Management.V1;
 using LtiIntegrationGateway.Infrastructure.Persistence;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts;
@@ -11,23 +10,9 @@ namespace LtiIntegrationGateway.Tests.Features.Contracts;
 
 public class ContractPublishAndActivationTests
 {
-    private static async Task CreateChannelAsync(HttpClient client, string name)
+    private static async Task CreateOutboundChannelAsync(HttpClient client, string name)
     {
-        var response = await client.PostAsync("/v1/channels", ManagementApi.Json(JsonSerializer.Serialize(new
-        {
-            name,
-            settings = new
-            {
-                baseUrl = "https://" + name + ".example",
-                authType = "none",
-                perAttemptTimeoutMs = 5000,
-                overallCapMs = 30000,
-                retryPolicy = new[]
-                {
-                    new { match = "transport_error", statusCodes = Array.Empty<int>(), delaysMs = new[] { 100 } },
-                },
-            },
-        })));
+        var response = await client.PostAsync($"/test/inbound-channels?name={Uri.EscapeDataString(name)}", content: null);
 
         await Assert.That(response.StatusCode).IsEqualTo(HttpStatusCode.OK);
     }
@@ -38,7 +23,7 @@ public class ContractPublishAndActivationTests
         int version = 1,
         string queue = "dpv.inbox")
     {
-        var update = await client.UpdateContractVersionSettingsAsync(
+        var update = await client.UpdateInboundContractVersionSettingsAsync(
             new UpdateContractVersionSettingsRequest
             {
                 ChannelName = channelName,
@@ -56,19 +41,19 @@ public class ContractPublishAndActivationTests
         string document,
         int version = 1)
     {
-        await client.UploadContractAsync(
+        await client.UploadInboundContractVersionAsync(
             new UploadContractRequest { ChannelName = channelName, Document = document },
             ManagementApi.Call());
 
         await SetRecipientQueueAsync(client, channelName, version);
 
-        var publish = await client.PublishContractVersionAsync(
+        var publish = await client.PublishInboundContractVersionAsync(
             new PublishContractVersionRequest { ChannelName = channelName, Version = version },
             ManagementApi.Call());
 
         await Assert.That(publish.Succeeded).IsTrue();
 
-        var activate = await client.ActivateContractVersionAsync(
+        var activate = await client.ActivateInboundContractVersionAsync(
             new ActivateContractVersionRequest { ChannelName = channelName, Version = version },
             ManagementApi.Call());
 
@@ -80,12 +65,12 @@ public class ContractPublishAndActivationTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http, "bank-a");
+        await CreateOutboundChannelAsync(http, "bank-a");
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
-        await grpc.UploadContractAsync(
+        await grpc.UploadInboundContractVersionAsync(
             new UploadContractRequest
             {
                 ChannelName = "bank-a",
@@ -95,13 +80,13 @@ public class ContractPublishAndActivationTests
 
         await SetRecipientQueueAsync(grpc, "bank-a");
 
-        var publish = await grpc.PublishContractVersionAsync(
+        var publish = await grpc.PublishInboundContractVersionAsync(
             new PublishContractVersionRequest { ChannelName = "bank-a", Version = 1 },
             ManagementApi.Call());
 
         await Assert.That(publish.Succeeded).IsTrue();
 
-        var operations = await grpc.ListContractOperationsAsync(
+        var operations = await grpc.ListInboundContractOperationsAsync(
             new ListContractOperationsRequest { ChannelName = "bank-a", Version = 1 },
             ManagementApi.Call());
 
@@ -115,12 +100,12 @@ public class ContractPublishAndActivationTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http, "bank-a");
+        await CreateOutboundChannelAsync(http, "bank-a");
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
-        await grpc.UploadContractAsync(
+        await grpc.UploadInboundContractVersionAsync(
             new UploadContractRequest
             {
                 ChannelName = "bank-a",
@@ -132,7 +117,7 @@ public class ContractPublishAndActivationTests
 
         await SetRecipientQueueAsync(grpc, "bank-a");
 
-        var publish = await grpc.PublishContractVersionAsync(
+        var publish = await grpc.PublishInboundContractVersionAsync(
             new PublishContractVersionRequest { ChannelName = "bank-a", Version = 1 },
             ManagementApi.Call());
 
@@ -145,15 +130,15 @@ public class ContractPublishAndActivationTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http, "bank-a");
-        await CreateChannelAsync(http, "bank-b");
+        await CreateOutboundChannelAsync(http, "bank-a");
+        await CreateOutboundChannelAsync(http, "bank-b");
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         await PublishAndActivateAsync(grpc, "bank-a", OpenApiSamples.OpenApi30WithPath("POST", "/callbacks/contracts"));
 
-        await grpc.UploadContractAsync(
+        await grpc.UploadInboundContractVersionAsync(
             new UploadContractRequest
             {
                 ChannelName = "bank-b",
@@ -163,7 +148,7 @@ public class ContractPublishAndActivationTests
 
         await SetRecipientQueueAsync(grpc, "bank-b");
 
-        var publish = await grpc.PublishContractVersionAsync(
+        var publish = await grpc.PublishInboundContractVersionAsync(
             new PublishContractVersionRequest { ChannelName = "bank-b", Version = 1 },
             ManagementApi.Call());
 
@@ -180,17 +165,17 @@ public class ContractPublishAndActivationTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http, "bank-a");
+        await CreateOutboundChannelAsync(http, "bank-a");
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
         await PublishAndActivateAsync(grpc, "bank-a", OpenApiSamples.OpenApi30WithPath("POST", "/callbacks/contracts"));
 
         await Assert.That((await http.PostAsync("/callbacks/contracts", null)).StatusCode)
             .IsEqualTo(HttpStatusCode.Accepted);
 
-        await grpc.UploadContractAsync(
+        await grpc.UploadInboundContractVersionAsync(
             new UploadContractRequest
             {
                 ChannelName = "bank-a",
@@ -200,11 +185,11 @@ public class ContractPublishAndActivationTests
 
         await SetRecipientQueueAsync(grpc, "bank-a", version: 2);
 
-        await grpc.PublishContractVersionAsync(
+        await grpc.PublishInboundContractVersionAsync(
             new PublishContractVersionRequest { ChannelName = "bank-a", Version = 2 },
             ManagementApi.Call());
 
-        var activated = await grpc.ActivateContractVersionAsync(
+        var activated = await grpc.ActivateInboundContractVersionAsync(
             new ActivateContractVersionRequest { ChannelName = "bank-a", Version = 2 },
             ManagementApi.Call());
 
@@ -226,12 +211,12 @@ public class ContractPublishAndActivationTests
     {
         using var factory = GatewayWebApplicationFactory.WithStorage(ManagementApi.Settings());
         using var http = ManagementApi.CreateClient(factory);
-        await CreateChannelAsync(http, "bank-a");
+        await CreateOutboundChannelAsync(http, "bank-a");
 
-        using var channel = ManagementApi.CreateChannel(factory);
-        var grpc = new ManagementService.ManagementServiceClient(channel);
+        using var OutboundChannel = ManagementApi.CreateChannel(factory);
+        var grpc = new ManagementService.ManagementServiceClient(OutboundChannel);
 
-        await grpc.UploadContractAsync(
+        await grpc.UploadInboundContractVersionAsync(
             new UploadContractRequest
             {
                 ChannelName = "bank-a",
@@ -241,11 +226,11 @@ public class ContractPublishAndActivationTests
 
         await SetRecipientQueueAsync(grpc, "bank-a");
 
-        await grpc.PublishContractVersionAsync(
+        await grpc.PublishInboundContractVersionAsync(
             new PublishContractVersionRequest { ChannelName = "bank-a", Version = 1 },
             ManagementApi.Call());
 
-        var second = await grpc.PublishContractVersionAsync(
+        var second = await grpc.PublishInboundContractVersionAsync(
             new PublishContractVersionRequest { ChannelName = "bank-a", Version = 1 },
             ManagementApi.Call());
 

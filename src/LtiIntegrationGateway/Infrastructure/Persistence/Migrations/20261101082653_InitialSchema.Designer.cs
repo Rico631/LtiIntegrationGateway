@@ -11,8 +11,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(GatewayDbContext))]
-    [Migration("20261031100735_AddInboundReceivedAtUnixMs")]
-    partial class AddInboundReceivedAtUnixMs
+    [Migration("20261101082653_InitialSchema")]
+    partial class InitialSchema
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -20,73 +20,7 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.14");
 
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channel", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Name")
-                        .IsUnique();
-
-                    b.ToTable("Channels");
-                });
-
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ChannelAllowedMethod", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("ChannelRevisionId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Method")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ChannelRevisionId", "Method")
-                        .IsUnique();
-
-                    b.ToTable("ChannelAllowedMethods");
-                });
-
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ChannelAllowedPath", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("ChannelRevisionId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Template")
-                        .IsRequired()
-                        .HasMaxLength(2048)
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ChannelRevisionId", "Template")
-                        .IsUnique();
-
-                    b.ToTable("ChannelAllowedPaths");
-                });
-
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ChannelAuditEntry", b =>
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels.ChannelAuditEntry", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -97,6 +31,11 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Details")
                         .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(16)
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset>("OccurredAt")
@@ -112,12 +51,12 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ChannelId", "OccurredAt");
+                    b.HasIndex("Direction", "ChannelId", "OccurredAt");
 
                     b.ToTable("ChannelAuditEntries");
                 });
 
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ChannelRevision", b =>
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels.ChannelRevision", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -133,9 +72,6 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                         .HasMaxLength(2048)
                         .HasColumnType("TEXT");
 
-                    b.Property<Guid>("ChannelId")
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("ConfigKey")
                         .HasMaxLength(256)
                         .HasColumnType("TEXT");
@@ -149,6 +85,9 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("Number")
                         .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("OutboundChannelId")
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("OverallCapMs")
                         .HasColumnType("INTEGER");
@@ -172,15 +111,67 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ChannelId", "Number")
+                    b.HasIndex("OutboundChannelId", "Number")
                         .IsUnique();
 
-                    b.HasIndex("ChannelId", "Status");
+                    b.HasIndex("OutboundChannelId", "Status");
 
                     b.ToTable("ChannelRevisions");
                 });
 
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ContractOperation", b =>
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels.InboundChannel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("InboundResponseTimeoutMs")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ResponseMode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("InboundChannels");
+                });
+
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels.OutboundChannel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("OutboundChannels");
+                });
+
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts.ContractOperation", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -203,12 +194,6 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("TEXT");
 
-                    b.Property<int?>("RateLimitPermit")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("RateLimitWindowSeconds")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("RecipientQueue")
                         .HasMaxLength(256)
                         .HasColumnType("TEXT");
@@ -229,7 +214,7 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                     b.ToTable("ContractOperations");
                 });
 
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ContractVersion", b =>
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts.ContractVersion", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -241,9 +226,6 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                     b.Property<string>("AuthType")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("ChannelId")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ConfigKey")
@@ -259,6 +241,9 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("HeaderName")
                         .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("InboundChannelId")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("PublishedAt")
@@ -293,15 +278,15 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ChannelId", "Status");
+                    b.HasIndex("InboundChannelId", "Status");
 
-                    b.HasIndex("ChannelId", "Version")
+                    b.HasIndex("InboundChannelId", "Version")
                         .IsUnique();
 
                     b.ToTable("ContractVersions");
                 });
 
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.InboundMessageLog", b =>
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Inbound.InboundMessageLog", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -346,10 +331,7 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                         .HasMaxLength(4096)
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset>("ReceivedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("ReceivedAtUnixMs")
+                    b.Property<long>("ReceivedAt")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("RelativePath")
@@ -361,6 +343,21 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("BLOB");
 
+                    b.Property<byte[]>("ResponseBody")
+                        .IsRequired()
+                        .HasColumnType("BLOB");
+
+                    b.Property<string>("ResponseContentType")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ResponseHeaders")
+                        .HasMaxLength(8192)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ResponseStatusCode")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("RouteTemplate")
                         .HasMaxLength(2048)
                         .HasColumnType("TEXT");
@@ -371,12 +368,10 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ChannelName", "ReceivedAt");
 
-                    b.HasIndex("ChannelName", "ReceivedAtUnixMs");
-
                     b.ToTable("InboundMessageLogs");
                 });
 
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ManagementAuditEntry", b =>
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Management.ManagementAuditEntry", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -411,7 +406,7 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                     b.ToTable("ManagementAuditEntries");
                 });
 
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.OutboundMessageLog", b =>
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Outbound.OutboundMessageLog", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -432,10 +427,7 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("CreatedAtUnixMs")
+                    b.Property<long>("CreatedAt")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("DeliveryAddress")
@@ -493,14 +485,16 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("DeliveryStatus", "CreatedAtUnixMs");
+                    b.HasIndex("ChannelName", "CreatedAt");
+
+                    b.HasIndex("DeliveryStatus", "CreatedAt");
 
                     b.HasIndex("MessageId", "DeliveryStatus");
 
                     b.ToTable("OutboundMessageLogs");
                 });
 
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.OutboundOperation", b =>
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Outbound.OutboundOperation", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -562,7 +556,7 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                     b.ToTable("OutboundOperations");
                 });
 
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRoute", b =>
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRoutes.ProductRoute", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -584,7 +578,7 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                     b.ToTable("ProductRoutes");
                 });
 
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRouteChannel", b =>
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRoutes.ProductRouteChannel", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -606,7 +600,7 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                     b.ToTable("ProductRouteChannels");
                 });
 
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRouteQueueAddress", b =>
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRoutes.ProductRouteQueueAddress", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -628,42 +622,20 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                     b.ToTable("ProductRouteQueueAddresses");
                 });
 
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ChannelAllowedMethod", b =>
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels.ChannelRevision", b =>
                 {
-                    b.HasOne("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ChannelRevision", "ChannelRevision")
-                        .WithMany("AllowedMethods")
-                        .HasForeignKey("ChannelRevisionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ChannelRevision");
-                });
-
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ChannelAllowedPath", b =>
-                {
-                    b.HasOne("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ChannelRevision", "ChannelRevision")
-                        .WithMany("AllowedPaths")
-                        .HasForeignKey("ChannelRevisionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ChannelRevision");
-                });
-
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ChannelRevision", b =>
-                {
-                    b.HasOne("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channel", "Channel")
+                    b.HasOne("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels.OutboundChannel", "OutboundChannel")
                         .WithMany("Revisions")
-                        .HasForeignKey("ChannelId")
+                        .HasForeignKey("OutboundChannelId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Channel");
+                    b.Navigation("OutboundChannel");
                 });
 
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ContractOperation", b =>
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts.ContractOperation", b =>
                 {
-                    b.HasOne("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ContractVersion", "ContractVersion")
+                    b.HasOne("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts.ContractVersion", "ContractVersion")
                         .WithMany("Operations")
                         .HasForeignKey("ContractVersionId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -672,20 +644,20 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                     b.Navigation("ContractVersion");
                 });
 
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ContractVersion", b =>
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts.ContractVersion", b =>
                 {
-                    b.HasOne("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channel", "Channel")
-                        .WithMany()
-                        .HasForeignKey("ChannelId")
+                    b.HasOne("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels.InboundChannel", "InboundChannel")
+                        .WithMany("ContractVersions")
+                        .HasForeignKey("InboundChannelId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Channel");
+                    b.Navigation("InboundChannel");
                 });
 
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRouteChannel", b =>
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRoutes.ProductRouteChannel", b =>
                 {
-                    b.HasOne("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRoute", "ProductRoute")
+                    b.HasOne("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRoutes.ProductRoute", "ProductRoute")
                         .WithMany("AllowedChannels")
                         .HasForeignKey("ProductRouteId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -694,9 +666,9 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                     b.Navigation("ProductRoute");
                 });
 
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRouteQueueAddress", b =>
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRoutes.ProductRouteQueueAddress", b =>
                 {
-                    b.HasOne("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRoute", "ProductRoute")
+                    b.HasOne("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRoutes.ProductRoute", "ProductRoute")
                         .WithMany("AllowedQueueAddresses")
                         .HasForeignKey("ProductRouteId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -705,24 +677,22 @@ namespace LtiIntegrationGateway.Infrastructure.Persistence.Migrations
                     b.Navigation("ProductRoute");
                 });
 
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channel", b =>
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels.InboundChannel", b =>
+                {
+                    b.Navigation("ContractVersions");
+                });
+
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels.OutboundChannel", b =>
                 {
                     b.Navigation("Revisions");
                 });
 
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ChannelRevision", b =>
-                {
-                    b.Navigation("AllowedMethods");
-
-                    b.Navigation("AllowedPaths");
-                });
-
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ContractVersion", b =>
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts.ContractVersion", b =>
                 {
                     b.Navigation("Operations");
                 });
 
-            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRoute", b =>
+            modelBuilder.Entity("LtiIntegrationGateway.Infrastructure.Persistence.Entities.ProductRoutes.ProductRoute", b =>
                 {
                     b.Navigation("AllowedChannels");
 
