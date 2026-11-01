@@ -10,6 +10,7 @@ using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Channels;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Contracts;
 using LtiIntegrationGateway.Infrastructure.Persistence.Entities.Inbound;
 using LtiIntegrationGateway.Infrastructure.Rebus;
+using LtiIntegrationGateway.Messaging;
 using LtiIntegrationGateway.Infrastructure.Routing;
 using LtiIntegrationGateway.Infrastructure.Security;
 using Microsoft.AspNetCore.Http;

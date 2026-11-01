@@ -19,6 +19,8 @@
   <ItemGroup>
     <ProjectReference Include="..\LtiIntegrationGateway.Management\LtiIntegrationGateway.Management.csproj" />
     <ProjectReference Include="..\LtiIntegrationGateway.Flow\LtiIntegrationGateway.Flow.csproj" />
+    <ProjectReference Include="..\..\simulation\LtiIntegrationGateway.Simulation.Product\LtiIntegrationGateway.Simulation.Product.csproj" />
+    <ProjectReference Include="..\..\simulation\LtiIntegrationGateway.Simulation.Integration\LtiIntegrationGateway.Simulation.Integration.csproj" />
   </ItemGroup>
 
 </Project>

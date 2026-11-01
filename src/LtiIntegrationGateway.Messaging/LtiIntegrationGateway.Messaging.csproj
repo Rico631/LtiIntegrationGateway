@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Формат сообщений шины, общий для сервисов шлюза и внешних участников: без него продукт
+       не сможет обменяться сообщениями с контуром потоков. -->
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Rebus" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LtiIntegrationGateway.Contracts\LtiIntegrationGateway.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

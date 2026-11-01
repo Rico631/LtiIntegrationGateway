@@ -9,6 +9,7 @@
     <Project Path="src/LtiIntegrationGateway.Core/LtiIntegrationGateway.Core.csproj" />
     <Project Path="src/LtiIntegrationGateway.Flow/LtiIntegrationGateway.Flow.csproj" />
     <Project Path="src/LtiIntegrationGateway.Management/LtiIntegrationGateway.Management.csproj" />
+    <Project Path="src/LtiIntegrationGateway.Messaging/LtiIntegrationGateway.Messaging.csproj" />
     <Project Path="src/LtiIntegrationGateway.ServiceDefaults/LtiIntegrationGateway.ServiceDefaults.csproj" />
     <Project Path="src/LtiIntegrationGateway.AppHost/LtiIntegrationGateway.AppHost.csproj" />
   </Folder>
@@ -22,5 +23,9 @@
     <Project Path="tests/LtiIntegrationGateway.Flow.Tests/LtiIntegrationGateway.Flow.Tests.csproj" />
     <Project Path="tests/LtiIntegrationGateway.Management.Tests/LtiIntegrationGateway.Management.Tests.csproj" />
     <Project Path="tests/LtiIntegrationGateway.TestSupport/LtiIntegrationGateway.TestSupport.csproj" />
+  </Folder>
+  <Folder Name="/simulation/">
+    <Project Path="simulation/LtiIntegrationGateway.Simulation.Product/LtiIntegrationGateway.Simulation.Product.csproj" />
+    <Project Path="simulation/LtiIntegrationGateway.Simulation.Integration/LtiIntegrationGateway.Simulation.Integration.csproj" />
   </Folder>
 </Solution>

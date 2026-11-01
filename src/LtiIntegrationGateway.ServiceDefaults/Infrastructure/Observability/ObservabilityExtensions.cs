@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -19,7 +20,8 @@ public static class ObservabilityExtensions
 
     /// <summary>
     /// Добавляет OTel traces/metrics и фоновый обновлятор backlog. При выключенной телеметрии
-    /// регистрирует только общие сервисы и не создаёт OTLP-экспортёров.
+    /// регистрирует только общие сервисы и не создаёт OTLP-экспортёров. Здесь же задаются общие
+    /// уровни логирования хостов.
     /// </summary>
     public static IServiceCollection AddGatewayObservability(
         this IServiceCollection services,
@@ -58,6 +60,16 @@ public static class ObservabilityExtensions
         services.AddSingleton(options);
         services.AddSingleton<GatewayMetrics>();
 
+        // Команды EF содержат полный SQL, схему и значения параметров и выполняются на каждый опрос
+        // конфигурации, изменение состояния экземпляра и каждую миграцию: на уровне Information они
+        // делают лог нечитаемым. Предупреждения и ошибки EF остаются видимыми.
+        services.AddLogging(logging => logging
+            .AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning)
+            // Health-пробы Aspire опрашивают /health/* постоянно: четыре info-строки на каждый опрос.
+            // Сами вызовы шлюза видны в журналах и трейсах, общие request-логи Kestrel не нужны.
+            .AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning)
+            .AddFilter("Microsoft.AspNetCore.Routing.EndpointMiddleware", LogLevel.Warning));
+
         if (!options.Enabled)
         {
             return services;
@@ -79,8 +91,8 @@ public static class ObservabilityExtensions
             .WithTracing(tracing => tracing
                 .SetSampler(new ParentBasedSampler(new TraceIdRatioBasedSampler(options.SamplingRatio)))
                 .AddSource(GatewayTelemetry.ActivitySourceName)
-                .AddAspNetCoreInstrumentation(instrumentation => instrumentation.RecordException = false)
-                .AddHttpClientInstrumentation(instrumentation => instrumentation.RecordException = false)
+                .AddAspNetCoreInstrumentation(instrumentation => instrumentation.RecordException = true)
+                .AddHttpClientInstrumentation(instrumentation => instrumentation.RecordException = true)
                 .AddRebusInstrumentation()
                 .AddOtlpExporter(exporter =>
                 {

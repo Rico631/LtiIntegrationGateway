@@ -3,7 +3,7 @@ using Google.Protobuf;
 using Rebus.Messages;
 using Rebus.Serialization;
 
-namespace LtiIntegrationGateway.Infrastructure.Rebus;
+namespace LtiIntegrationGateway.Messaging;
 
 /// <summary>
 /// Сериализатор сообщений Rebus на основе Protobuf: тело — ProtoJSON, тип — заголовок

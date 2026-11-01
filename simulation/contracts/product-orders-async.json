@@ -1,0 +1,28 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "product-orders-async", "version": "1.0.0" },
+  "paths": {
+    "/order": {
+      "post": {
+        "operationId": "receiveOrder",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["orderId"],
+                "properties": {
+                  "orderId": { "type": "string" },
+                  "amount": { "type": "integer" }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": { "202": { "description": "accepted" } }
+      }
+    }
+  }
+}

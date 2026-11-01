@@ -86,12 +86,28 @@ public sealed partial class RegisterProductRouteHandler(GatewayDbContext db)
 
         var address = QueueNames.ProductInbox(command.ProductId);
 
+        var channels = command.AllowedChannels
+            .Where(channel => !string.IsNullOrWhiteSpace(channel))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
         var route = await db.ProductRoutes
             .Include(entity => entity.AllowedChannels)
             .Include(entity => entity.AllowedQueueAddresses)
             .SingleOrDefaultAsync(
                 entity => entity.IntegrationId == command.IntegrationId && entity.ProductId == command.ProductId,
                 cancellationToken);
+
+        // Повторная регистрация с тем же набором каналов и адресов не меняет ни маршрут,
+        // ни версию конфигурации: иначе DELETE+INSERT тех же строк ломается на гонке.
+        var unchanged = route is not null &&
+            SameSet(route.AllowedChannels.Select(child => child.ChannelName), channels) &&
+            SameSet(route.AllowedQueueAddresses.Select(child => child.Address), [address]);
+
+        if (unchanged)
+        {
+            return new RegisterProductRouteResult([]);
+        }
 
         if (route is null)
         {
@@ -106,22 +122,42 @@ public sealed partial class RegisterProductRouteHandler(GatewayDbContext db)
             db.ProductRoutes.Add(route);
         }
 
-        route.AllowedChannels.Clear();
-        route.AllowedQueueAddresses.Clear();
-
-        foreach (var channel in command.AllowedChannels.Distinct(StringComparer.Ordinal))
+        // Дочерние строки приводятся точечно: неизменившиеся не удаляются и не пересоздаются.
+        foreach (var stale in route.AllowedChannels
+            .Where(child => !channels.Contains(child.ChannelName, StringComparer.Ordinal))
+            .ToArray())
         {
-            route.AllowedChannels.Add(new ProductRouteChannel { Id = Guid.NewGuid(), ChannelName = channel });
+            route.AllowedChannels.Remove(stale);
+        }
+
+        foreach (var channel in channels.Where(channel =>
+            route.AllowedChannels.All(child => !string.Equals(child.ChannelName, channel, StringComparison.Ordinal))))
+        {
+            // Ключ не задаётся вручную: с заполненным ключом EF считает строку существующей и делает UPDATE.
+            route.AllowedChannels.Add(new ProductRouteChannel { ChannelName = channel });
         }
 
         // Существующие записи с произвольными адресами не мигрируются, но повторная регистрация
         // приводит маршрут к вычисленному адресу.
-        route.AllowedQueueAddresses.Add(new ProductRouteQueueAddress { Id = Guid.NewGuid(), Address = address });
+        foreach (var stale in route.AllowedQueueAddresses
+            .Where(child => !string.Equals(child.Address, address, StringComparison.Ordinal))
+            .ToArray())
+        {
+            route.AllowedQueueAddresses.Remove(stale);
+        }
+
+        if (route.AllowedQueueAddresses.All(child => !string.Equals(child.Address, address, StringComparison.Ordinal)))
+        {
+            route.AllowedQueueAddresses.Add(new ProductRouteQueueAddress { Address = address });
+        }
 
         await IntegrationRegistry.BumpAsync(db, command.IntegrationId, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
 
         return new RegisterProductRouteResult([]);
     }
+
+    private static bool SameSet(IEnumerable<string> actual, IEnumerable<string> expected) =>
+        actual.Order(StringComparer.Ordinal).SequenceEqual(expected.Order(StringComparer.Ordinal), StringComparer.Ordinal);
 }
 

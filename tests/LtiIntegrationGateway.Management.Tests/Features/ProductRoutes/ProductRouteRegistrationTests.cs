@@ -116,6 +116,82 @@ public class ProductRouteRegistrationTests
     }
 
     [Test]
+    public async Task Repeated_registration_with_same_data_does_not_recreate_children()
+    {
+        using var database = new PostgresTestDatabase();
+        database.Migrate();
+
+        using (var db = database.CreateContext())
+        {
+            await AddOutboundChannelAsync(db);
+
+            await new RegisterProductRouteHandler(db).HandleAsync(
+                new RegisterProductRouteCommand(ProductId, [ChannelName], []));
+        }
+
+        Guid channelId;
+        Guid addressId;
+
+        using (var db = database.CreateContext())
+        {
+            channelId = await db.ProductRouteChannels.Select(entity => entity.Id).SingleAsync();
+            addressId = await db.ProductRouteQueueAddresses.Select(entity => entity.Id).SingleAsync();
+        }
+
+        using (var db = database.CreateContext())
+        {
+            var result = await new RegisterProductRouteHandler(db).HandleAsync(
+                new RegisterProductRouteCommand(ProductId, [ChannelName], []));
+
+            await Assert.That(result.Problems.Count).IsEqualTo(0);
+        }
+
+        using var verifyDb = database.CreateContext();
+
+        await Assert.That((await verifyDb.ProductRouteChannels.Select(entity => entity.Id).SingleAsync()))
+            .IsEqualTo(channelId);
+        await Assert.That((await verifyDb.ProductRouteQueueAddresses.Select(entity => entity.Id).SingleAsync()))
+            .IsEqualTo(addressId);
+    }
+
+    [Test]
+    public async Task Registration_replaces_channel_set_of_existing_route()
+    {
+        using var database = new PostgresTestDatabase();
+        database.Migrate();
+
+        using (var db = database.CreateContext())
+        {
+            await AddOutboundChannelAsync(db);
+
+            db.OutboundChannels.Add(new OutboundChannel
+            {
+                Id = Guid.NewGuid(),
+                Name = "other",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+
+            await db.SaveChangesAsync();
+
+            await new RegisterProductRouteHandler(db).HandleAsync(
+                new RegisterProductRouteCommand(ProductId, [ChannelName], []));
+        }
+
+        using (var db = database.CreateContext())
+        {
+            var result = await new RegisterProductRouteHandler(db).HandleAsync(
+                new RegisterProductRouteCommand(ProductId, ["other"], []));
+
+            await Assert.That(result.Problems.Count).IsEqualTo(0);
+        }
+
+        using var verifyDb = database.CreateContext();
+        var channels = await verifyDb.ProductRouteChannels.Select(entity => entity.ChannelName).ToArrayAsync();
+
+        await Assert.That(channels).IsEquivalentTo(new[] { "other" });
+    }
+
+    [Test]
     public async Task Read_returns_computed_address_for_legacy_record()
     {
         using var database = new PostgresTestDatabase();

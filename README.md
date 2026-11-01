@@ -47,12 +47,53 @@
 dotnet run --project src/LtiIntegrationGateway.AppHost
 ```
 
-Требуется запущенный Docker. Ссылку на dashboard AppHost печатает при старте; оба сервиса экспортируют в него traces и metrics по OTLP. В списке ресурсов dashboard показывает состояние готовности: AppHost опрашивает `/health/ready` каждого сервиса (проба включает проверку хранилища), поэтому упавший или неготовый экземпляр виден без перехода в логи. Ключ управляющего API для разработки — `dev-management-api-key` (задаётся в AppHost, для эксплуатации не используется).
+Требуется запущенный Docker. Ссылку на dashboard AppHost печатает при старте; оба сервиса экспортируют в него traces и metrics по OTLP. В списке ресурсов dashboard показывает состояние готовности: AppHost опрашивает `/health/ready` каждого сервиса (проба включает проверку хранилища), поэтому упавший или неготовый экземпляр виден без перехода в логи. Ссылки ресурсов ведут в Swagger UI (`/swagger`), а не на корень сервиса. Ключ управляющего API для разработки — `dev-management-api-key` (задаётся в AppHost, для эксплуатации не используется).
+
+### Симуляция живого контура
+
+AppHost поднимает рядом со шлюзом два dev-сервиса из `simulation/`: `product` (продукт — участник
+шины) и `integration` (внешняя система — HTTP-контракт). Порты фиксированы: управляющий API —
+`http://localhost:5080`, продукт — `http://localhost:5081`, внешняя система — `http://localhost:5082`;
+канал вызывает внешнюю систему по `https://localhost:5443` (dev-сертификат).
+
+Порядок запуска задан ожиданиями Aspire: `management` (готов) → оба `flow-*` (готовы) → `product` →
+`integration`. Скриптов нет: продукт при старте сам регистрирует конфигурацию в управляющем API —
+канал `http`, каналы `product-orders-async` и `product-orders-sync` с контрактами из
+`simulation/contracts` и маршрут `product`, — ждёт её применения экземплярами интеграции и только
+потом начинает отправку. Поэтому готовность продукта (`/health/ready`) означает «конфигурация
+зарегистрирована», и внешняя система стартует уже после неё. Оба входящих сценария идут через
+`flow-bank-a`.
+
+Дальше контур работает сам, раз в 5 секунд в каждую сторону:
+
+1. **product → flow → integration (outbound).** Продукт публикует `OutboundRequest` `POST /customer`
+   с телом `{"name":"customer-N"}`; `flow-bank-a` вызывает `POST /customer` внешней системы;
+   `integration` отвечает `{"status":"ok","message":"recieved customer-N"}`; шлюз публикует
+   `OutboundResult` в `product.inbox`, продукт пишет ответ в лог.
+2. **integration → flow → product (inbound async).** `integration` вызывает `POST /order` шлюза;
+   `flow-bank-a` проверяет тело по контракту канала `product-orders-async` и публикует
+   `InboundMessage` в `product.inbox`; продукт пишет заказ в лог.
+3. **integration → flow → product (inbound sync).** `integration` вызывает `GET /order/{orderid}`;
+   `flow-bank-a` публикует `InboundMessage` с `reply_expected = true`; продукт пишет вызов в лог и
+   отвечает сгенерированным заказом; шлюз возвращает ответ внешней системе, `integration` пишет его
+   в лог.
+
+Все принятые и отправленные сообщения логируются в `product` и `integration` — это и есть экран
+прогона. В журналах шлюза видны статусы доставки, коды и тела ответов: `InboundMessageLogs`
+(`Sent` для async, `Replied` для sync) и `OutboundMessageLogs`.
+
+Swagger UI: `http://localhost:5081/swagger` (собственное API продукта `/openapi/v1.json` и оба
+контракта `/contracts/product-orders-async.json`, `/contracts/product-orders-sync.json`) и
+`http://localhost:5082/swagger` (внешняя система: `POST /customer`). Опубликованные входящие контракты
+смотрит `flow`: у каждого экземпляра сводный документ `/openapi/inbound.json` и UI `/swagger` (адрес
+печатает dashboard). Подробности решений — в `openspec/changes/` (изменение
+`2026-11-01-debug-simulation`).
 
 Пароль PostgreSQL для разработки фиксирован (`dev-postgres-password`), данные хранятся в томе
-`lti-gateway-postgres-data`. Пароль нельзя менять без пересоздания тома: PostgreSQL сохраняет пароль
-первого запуска. Если запуск завершается ошибкой `28P01: password authentication failed`, удалите том и
-повторите запуск:
+`lti-gateway-postgres-data`. Смотреть записи удобно в pgweb — AppHost поднимает его вместе с базой:
+`http://localhost:8081` (подключён к БД `gateway`, пользователь `postgres`). Пароль нельзя менять без
+пересоздания тома: PostgreSQL сохраняет пароль первого запуска. Если запуск завершается ошибкой
+`28P01: password authentication failed`, удалите том и повторите запуск:
 
 ```bash
 docker volume rm lti-gateway-postgres-data

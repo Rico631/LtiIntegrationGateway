@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- Симуляция продукта: участник шины, который отправляет OutboundRequest и принимает
+       OutboundResult и InboundMessage. В кластер не разворачивается. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Rebus" />
+    <PackageReference Include="Rebus.PostgreSql" />
+    <PackageReference Include="Rebus.ServiceProvider" />
+    <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LtiIntegrationGateway.Contracts\LtiIntegrationGateway.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\LtiIntegrationGateway.Core\LtiIntegrationGateway.Core.csproj" />
+    <ProjectReference Include="..\..\src\LtiIntegrationGateway.Messaging\LtiIntegrationGateway.Messaging.csproj" />
+    <ProjectReference Include="..\..\src\LtiIntegrationGateway.ServiceDefaults\LtiIntegrationGateway.ServiceDefaults.csproj" />
+  </ItemGroup>
+
+  <!-- Контракты продукта — те же файлы, что загружаются в управляющий API и показываются в Swagger. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\contracts\product-orders-async.json" LogicalName="product-orders-async.json" />
+    <EmbeddedResource Include="..\contracts\product-orders-sync.json" LogicalName="product-orders-sync.json" />
+  </ItemGroup>
+
+</Project>

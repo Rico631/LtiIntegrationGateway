@@ -2,6 +2,7 @@ using LtiIntegrationGateway.Contracts.Messages.V1;
 using LtiIntegrationGateway.Features.Configuration;
 using LtiIntegrationGateway.Features.Inbound;
 using LtiIntegrationGateway.Infrastructure.Rebus;
+using LtiIntegrationGateway.Messaging;
 using LtiIntegrationGateway.Tests.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 using Rebus.Activation;

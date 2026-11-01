@@ -21,8 +21,11 @@
 | `src/LtiIntegrationGateway.Core` | модель данных, миграции, OpenAPI, маршруты, секреты, `Result<T>` |
 | `src/LtiIntegrationGateway.Management` | управляющий API, жизненный цикл конфигурации, аудит, миграции |
 | `src/LtiIntegrationGateway.Flow` | входящий и исходящий контуры, Rebus, применение конфигурации |
+| `src/LtiIntegrationGateway.Messaging` | формат сообщений Rebus (ProtoJSON + `rbs2-msg-type`), общий для шлюза и внешних участников |
 | `src/LtiIntegrationGateway.ServiceDefaults` | OTel, пробы, настройка хранилища |
 | `src/LtiIntegrationGateway.AppHost` | Aspire-контур локальной разработки |
+| `simulation/LtiIntegrationGateway.Simulation.Product` | dev-продукт для живого прогона: участник шины, сам регистрирует конфигурацию в `management`, раз в 5 с вызывает `POST /customer` и логирует входящие события |
+| `simulation/LtiIntegrationGateway.Simulation.Integration` | dev-внешняя система: HTTP-контракт для шлюза и клиент к нему |
 | `tests/LtiIntegrationGateway.*.Tests` | тесты по сервисам; общая обвязка — `TestSupport` |
 
 Срез принадлежит одному сервису. В `Core` нет DI-регистраций, middleware, хостинга и Rebus; общими

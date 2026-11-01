@@ -1,4 +1,5 @@
 using LtiIntegrationGateway.Features.Configuration;
+using LtiIntegrationGateway.Messaging;
 using Microsoft.Extensions.Options;
 using Rebus.Config;
 using Rebus.Retry.Simple;

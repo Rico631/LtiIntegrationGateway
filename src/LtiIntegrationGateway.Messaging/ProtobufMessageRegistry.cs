@@ -1,7 +1,7 @@
 using Google.Protobuf.Reflection;
 using LtiIntegrationGateway.Contracts.Messages.V1;
 
-namespace LtiIntegrationGateway.Infrastructure.Rebus;
+namespace LtiIntegrationGateway.Messaging;
 
 /// <summary>
 /// Реестр интеграционных сообщений: полное имя сообщения → дескриптор.

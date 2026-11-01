@@ -2,7 +2,7 @@ using System.Text;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using LtiIntegrationGateway.Contracts.Messages.V1;
-using LtiIntegrationGateway.Infrastructure.Rebus;
+using LtiIntegrationGateway.Messaging;
 using Rebus.Messages;
 
 namespace LtiIntegrationGateway.Tests.Infrastructure.Rebus;

@@ -223,8 +223,11 @@ Runtime использует согласованные снимки конфи�
 | `src/LtiIntegrationGateway.Core` | модель данных, `GatewayDbContext`, миграции, чтение и проверка OpenAPI, построение и проверка наборов маршрутов, `ISecretStore`, `Result<T>` |
 | `src/LtiIntegrationGateway.Management` | управляющий gRPC/REST API, OpenAPI-документ и Swagger UI, жизненный цикл конфигурации, аудит, единственный владелец схемы и миграций |
 | `src/LtiIntegrationGateway.Flow` | входящий и исходящий контуры, транспорт Rebus, каталог маршрутов, применение конфигурации |
-| `src/LtiIntegrationGateway.ServiceDefaults` | OTel, пробы `/health/live` и `/health/ready`, настройка хранилища |
-| `src/LtiIntegrationGateway.AppHost` | Aspire: PostgreSQL, реплики management и flow, dashboard с телеметрией и состоянием проб готовности |
+| `src/LtiIntegrationGateway.Messaging` | формат сообщений Rebus (ProtoJSON и `rbs2-msg-type`), общий для шлюза и внешних участников |
+| `src/LtiIntegrationGateway.ServiceDefaults` | OTel, пробы `/health/live` и `/health/ready`, настройка хранилища, общие уровни логирования (без info-логов EF-команд и health-проб) |
+| `src/LtiIntegrationGateway.AppHost` | Aspire: PostgreSQL и pgweb для просмотра данных, реплики management и flow, dashboard с телеметрией и состоянием проб готовности, dev-симуляция контура |
+| `simulation/LtiIntegrationGateway.Simulation.Product` | dev-продукт: участник шины на очереди `product.inbox`; при старте регистрирует каналы, контракты и маршрут в управляющем API, раз в 5 с отправляет `OutboundRequest` `POST /customer`, логирует ответы и входящие сообщения (только локальный контур) |
+| `simulation/LtiIntegrationGateway.Simulation.Integration` | dev-внешняя система: `POST /customer` для исходящего контура и цикл вызовов шлюза (`POST /order`, `GET /order/{orderid}`) с логированием (только локальный контур) |
 | `tests/LtiIntegrationGateway.Core.Tests` | тесты модели, OpenAPI, маршрутов и сериализации |
 | `tests/LtiIntegrationGateway.Management.Tests` | тесты управляющего API, жизненного цикла и изоляции интеграций |
 | `tests/LtiIntegrationGateway.Flow.Tests` | тесты входящего и исходящего контуров, применения конфигурации |
@@ -245,7 +248,9 @@ Runtime использует согласованные снимки конфи�
 | Хост | Что регистрирует | Чего не делает |
 |---|---|---|
 | `Management/Program.cs` | хранилище, OTel (`service.name = management`), health, управляющий gRPC-фасад, срезы конфигурации, аудит, `AddGrpc().AddJsonTranscoding()`, `Database.Migrate()`, `/openapi/management.json` и Swagger UI `/swagger` | не подключает Rebus, не применяет конфигурацию в runtime, не регистрирует входящие маршруты |
-| `Flow/Program.cs` | хранилище, OTel (`service.name = flow`), health, `FlowOptions`, Rebus, входящий и исходящий контуры, `FlowConfigurationApplier`, ограничение частоты, источник динамических endpoint'ов | не применяет миграции, не публикует управляющий API |
+| `Flow/Program.cs` | хранилище, OTel (`service.name = flow`), health, `FlowOptions`, Rebus, входящий и исходящий контуры, `FlowConfigurationApplier`, ограничение частоты, источник динамических endpoint'ов, сводный OpenAPI опубликованных входящих контрактов `/openapi/inbound.json` и Swagger UI `/swagger` | не применяет миграции, не публикует управляющий API |
+| `Simulation.Product/Program.cs` | Rebus на очереди `product.inbox`, регистрация каналов, контрактов и маршрута в управляющем API при старте, отправка `OutboundRequest` `POST /customer` раз в 5 с, приём результатов и входящих сообщений с логированием, ответ в синхронном режиме, пробы, OTel (`service.name = product`) | не входит в поставку: запускается только AppHost |
+| `Simulation.Integration/Program.cs` | HTTP-контракт внешней системы (`POST /customer`) и цикл вызовов шлюза (`POST /order`, `GET /order/{orderid}`) с логированием, OTel (`service.name = integration`) | не входит в поставку: запускается только AppHost |
 
 Оба хоста проверяют конфигурацию **после** `builder.Build()`: тестовые переопределения видны только к
 этому моменту. Отсутствие `ConnectionStrings:Gateway` завершает запуск исключением с именем ключа.
@@ -286,11 +291,13 @@ error-queue и область действия проверок.
 | `Flow/Features/Outbound` | обработка `OutboundRequest`: проверки, авторизация, HTTP с повторами, операция и журнал, диспетчер доставки | spec `outbound-dispatch` |
 | `Flow/Features/Inbound` | приём входящего вызова: проверки, аутентификация, публикация `InboundMessage`, журнал, отказ отключённой операции | spec `inbound-dispatch`, `inbound-routing` |
 | `Flow/Infrastructure/Http` | пул соединений по ключу канала | раздел 0.7 |
-| `Flow/Infrastructure/Rebus` | сериализатор ProtoJSON, реестр типов, конфигурация шины | разделы 0.4 и 6 |
+| `Flow/Infrastructure/Rebus` | подключение шины экземпляра и reply-шина для синхронного входящего режима | разделы 0.4 и 6; формат сообщений — `src/LtiIntegrationGateway.Messaging` |
 | `Flow/Infrastructure/Routing` | источник endpoint'ов из каталога маршрутов | раздел 0.5 |
 | `Flow/Infrastructure/Observability` | backlog-gauge ожидающих доставки результатов | раздел 8 |
 | `ServiceDefaults/Infrastructure` | OTel, пробы, `AddGatewayStorage`, `DatabaseHealthCheck` | разделы 2 и 8 |
-| `AppHost` | Aspire-контур разработки: PostgreSQL, два management, по два flow на интеграцию, состояние проб готовности в dashboard | README |
+| `Messaging` | `ProtobufSerializer` и `ProtobufMessageRegistry`: формат тела и заголовок типа для всех участников шины | раздел 0.4 |
+| `AppHost` | Aspire-контур разработки: PostgreSQL, два management, по два flow на интеграцию, dev-симуляция контура, состояние проб готовности в dashboard | README |
+| `simulation` | Контракты inbound-каналов продукта в `simulation/contracts` (встраиваются в сборку и отдаются по `/contracts/*`); скриптов нет — конфигурацию регистрирует продукт при старте | README |
 
 `bin`, `obj`, `Properties` — служебные, в архитектуре не участвуют.
 

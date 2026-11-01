@@ -1,5 +1,5 @@
 using LtiIntegrationGateway.Contracts.Messages.V1;
-using LtiIntegrationGateway.Infrastructure.Rebus;
+using LtiIntegrationGateway.Messaging;
 using Rebus.Activation;
 using Rebus.Config;
 using Rebus.Handlers;

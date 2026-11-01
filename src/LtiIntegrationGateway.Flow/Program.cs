@@ -1,6 +1,7 @@
 using System.Threading.RateLimiting;
 using LtiIntegrationGateway.Contracts.Messages.V1;
 using LtiIntegrationGateway.Features.Configuration;
+using LtiIntegrationGateway.Features.Documentation;
 using LtiIntegrationGateway.Features.Host;
 using LtiIntegrationGateway.Features.Inbound;
 using LtiIntegrationGateway.Features.Outbound;
@@ -147,6 +148,14 @@ var endpointRouteBuilder = (IEndpointRouteBuilder)app;
 endpointRouteBuilder.DataSources.Add(app.Services.GetRequiredService<InboundEndpointDataSource>());
 
 app.MapGatewayHealthProbes();
+
+// Входящие контракты для ознакомления: документ собирается из активных версий интеграции.
+app.MapInboundContractDocument();
+app.UseSwaggerUI(ui =>
+{
+    ui.RoutePrefix = "swagger";
+    ui.SwaggerEndpoint("/openapi/inbound.json", "Входящие контракты");
+});
 
 app.Run();
 
