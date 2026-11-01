@@ -90,6 +90,7 @@ StyleCopReport.xml
 *.tmp
 *.tmp_proj
 *_wpftmp.csproj
+*.err
 *.log
 *.vspscc
 *.vssscc
@@ -366,3 +367,5 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# Aspire publish output
+apphost-manifest.json

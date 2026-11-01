@@ -285,3 +285,11 @@ indent_size = 2
 
 [*.md]
 trim_trailing_whitespace = false
+
+# ============================================================
+# EF Core migrations
+# ============================================================
+
+# Миграции генерируются инструментом; стилевые правила к ним не применяются.
+[**/Infrastructure/Persistence/Migrations/*.cs]
+dotnet_diagnostic.IDE0005.severity = none
