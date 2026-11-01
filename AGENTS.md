@@ -9,9 +9,25 @@
 - `openspec/config.yaml` — правила подготовки и сопровождения артефактов OpenSpec.
 - `openspec/specs/` — актуальные функциональные и системные требования, ожидаемое поведение и проверяемые сценарии. Перед изменением изучай затрагиваемые спецификации.
 - `ARCHITECTURE.md` — архитектурные границы, принципы, технические ограничения, взаимодействия компонентов и фактическая организация решения.
-- `src/LtiIntegrationGateway/Protos/` — исходные контракты gRPC/REST и сообщений Rebus.
+- `protos/` — исходные контракты gRPC/REST и сообщений Rebus.
 - `README.md` — обзор проекта, настройка, сборка и запуск.
 - `openspec/changes/` и `openspec/changes/archive/` — контекст и история текущих и завершённых изменений.
+
+## Структура решения
+
+| Проект | Ответственность |
+|---|---|
+| `src/LtiIntegrationGateway.Contracts` | генерация C# из `protos/` |
+| `src/LtiIntegrationGateway.Core` | модель данных, миграции, OpenAPI, маршруты, секреты, `Result<T>` |
+| `src/LtiIntegrationGateway.Management` | управляющий API, жизненный цикл конфигурации, аудит, миграции |
+| `src/LtiIntegrationGateway.Flow` | входящий и исходящий контуры, Rebus, применение конфигурации |
+| `src/LtiIntegrationGateway.ServiceDefaults` | OTel, пробы, настройка хранилища |
+| `src/LtiIntegrationGateway.AppHost` | Aspire-контур локальной разработки |
+| `tests/LtiIntegrationGateway.*.Tests` | тесты по сервисам; общая обвязка — `TestSupport` |
+
+Срез принадлежит одному сервису. В `Core` нет DI-регистраций, middleware, хостинга и Rebus; общими
+остаются модель данных, чтение и проверка OpenAPI, построение и проверка наборов маршрутов, абстракции
+секретов и `Result<T>`.
 
 Не создавай ADR и не поддерживай отдельный журнал архитектурных решений. Контекст, альтернативы и причины конкретного изменения фиксируй в OpenSpec Change; после принятия изменения актуализируй соответствующие Specs и, когда затронута архитектура, `ARCHITECTURE.md`. Не дублируй в OpenSpec полные архитектурные ограничения из `ARCHITECTURE.md`.
 
@@ -25,7 +41,7 @@
 
 Protobuf-файлы — единственный публикуемый артефакт контракта: потребитель забирает `.proto` из репозитория и генерирует типы самостоятельно. Поэтому комментарии в `.proto` являются нормативной документацией контракта.
 
-**Требование.** Каждый файл `src/LtiIntegrationGateway/Protos/**/*.proto`, кроме вендорных копий `Protos/google/api/**` (их не редактировать), SHALL быть документирован полностью. Комментарий обязателен непосредственно перед каждым:
+**Требование.** Каждый файл `protos/**/*.proto`, кроме вендорных копий `protos/google/api/**` (их не редактировать), SHALL быть документирован полностью. Комментарий обязателен непосредственно перед каждым:
 
 - `service`;
 - `rpc`;
@@ -58,11 +74,11 @@ Protobuf-файлы — единственный публикуемый арте
 Запусти из корня репозитория в PowerShell:
 
 ```powershell
-$files = Get-ChildItem -Recurse 'src\LtiIntegrationGateway\Protos' -Filter '*.proto' -File |
+$files = Get-ChildItem -Recurse 'protos' -Filter '*.proto' -File |
     Where-Object { $_.FullName -notmatch '[\\/]google[\\/]api[\\/]' }
 
 $issues = foreach ($file in $files) {
-    $lines = Get-Content $file
+    $lines = Get-Content $file.FullName
     for ($i = 0; $i -lt $lines.Count; $i++) {
         $line = $lines[$i].Trim()
         $isDocumentedDeclaration =
@@ -94,6 +110,17 @@ dotnet build LtiIntegrationGateway.slnx
 
 Сборка должна завершиться без ошибок и предупреждений. Не объявляй проверку или сборку успешной, если команда фактически не запускалась или завершилась ошибкой.
 
+## Зависимости и версии пакетов
+
+Версии NuGet-пакетов задаются централизованно: `Directory.Packages.props` с `ManagePackageVersionsCentrally=true`.
+
+**Требование.** В `PackageReference` SHALL NOT указываться атрибут `Version`. Новая зависимость добавляется двумя шагами: элемент `PackageVersion` в `Directory.Packages.props`, затем `PackageReference` без версии в файле проекта.
+
+- Версия меняется в одном месте и действует для всех проектов решения; расхождение версий между сервисами и тестами исключено.
+- `CentralPackageTransitivePinningEnabled=false`: транзитивные версии не поднимаются автоматически. Если провайдер (например, `Npgsql.EntityFrameworkCore.PostgreSQL`) тянет более старую версию EF Core, в затронутых проектах остаётся прямая ссылка на нужную версию — она должна быть согласована с `PackageVersion`.
+- Пакет, добавленный только в тестовый проект, всё равно получает `PackageVersion` в общем файле.
+- Версии, зафиксированные в `Directory.Packages.props`, не дублируются в `README.md` и OpenSpec-артефактах: источник истины — файл.
+
 ## C#: обработчики и сущности
 
 ### Обработчики
@@ -102,7 +129,7 @@ dotnet build LtiIntegrationGateway.slnx
 
 ### Сущности
 
-- Файлы в `Infrastructure/Persistence/Entities/**` SHALL быть сгруппированы по логическим папкам: `Channels`, `Contracts`, `Inbound`, `Outbound`, `ProductRoutes`, `Management`.
+- Файлы в `src/LtiIntegrationGateway.Core/Infrastructure/Persistence/Entities/**` SHALL быть сгруппированы по логическим папкам: `Channels`, `Contracts`, `Flow`, `Inbound`, `Integrations`, `Management`, `Outbound`, `ProductRoutes`.
 - Каждый класс сущности SHALL реализовывать `IEntity`.
 - Каждое публичное свойство сущности SHALL иметь XML-комментарий `<summary>`.
 - Перечисления, относящиеся к сущностям, документируются аналогично.

@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Единственное место генерации типов из публикуемых контрактов: сервисы ссылаются на проект
+       и не компилируют .proto повторно. -->
+  <ItemGroup>
+    <PackageReference Include="Google.Api.CommonProtos" />
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Core.Api" />
+    <PackageReference Include="Grpc.Tools" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="..\..\protos\v1\integration_messages.proto" ProtoRoot="..\..\protos" GrpcServices="None" Link="protos\v1\integration_messages.proto" />
+    <Protobuf Include="..\..\protos\v1\management_api.proto" ProtoRoot="..\..\protos" GrpcServices="Both" Link="protos\v1\management_api.proto" />
+  </ItemGroup>
+
+  <!-- Комментарии .proto попадают в дескриптор только при явной записи дескриптора в файл
+       (descriptor_set_out), которую Grpc.Tools не делает. Дескриптор с source_code_info нужен
+       как описания в OpenAPI-документе управляющего API (Swagger): Management читает его
+       из ресурса сборки. -->
+  <Target Name="ManagementContractDescriptor"
+          BeforeTargets="AssignTargetPaths"
+          DependsOnTargets="ManagementContractDescriptorFile"
+          Condition=" '$(DesignTimeBuild)' != 'true' ">
+    <ItemGroup>
+      <EmbeddedResource Include="$(IntermediateOutputPath)management_api.desc" LogicalName="management_api.desc" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="ManagementContractDescriptorFile"
+          DependsOnTargets="Protobuf_ResolvePlatform"
+          Inputs="..\..\protos\v1\management_api.proto"
+          Outputs="$(IntermediateOutputPath)management_api.desc"
+          Condition=" '$(DesignTimeBuild)' != 'true' ">
+    <Exec Command="&quot;$(Protobuf_ProtocFullPath)&quot; --descriptor_set_out=&quot;$(IntermediateOutputPath)management_api.desc&quot; --include_source_info --proto_path=&quot;$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)..\..\protos'))&quot; --proto_path=&quot;$(Protobuf_StandardImportsPath)&quot; v1/management_api.proto" />
+  </Target>
+
+  <ItemGroup>
+    <!-- Вендорные googleapis-дескрипторы: нужны protoc для аннотаций transcoding, C#-код берётся
+         из Google.Api.CommonProtos, поэтому сами файлы не компилируются. -->
+    <None Include="..\..\protos\google\api\*.proto" Link="protos\google\api\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

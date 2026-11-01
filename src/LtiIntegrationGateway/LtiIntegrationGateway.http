@@ -1,7 +1,0 @@
-@HostAddress = http://localhost:5078
-
-GET {{HostAddress}}/health/live
-Accept: text/plain
-
-###
-

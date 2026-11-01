@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Общая обвязка тестов: база в контейнере, тестовые хосты и подделки. -->
+  <PropertyGroup>
+    <!-- Фикстуры задают API удобством вызова, а не статикой. -->
+    <NoWarn>$(NoWarn);CA1822</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.Net.Client" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Rebus" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="TUnit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LtiIntegrationGateway.Contracts\LtiIntegrationGateway.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\LtiIntegrationGateway.Core\LtiIntegrationGateway.Core.csproj" />
+    <ProjectReference Include="..\..\src\LtiIntegrationGateway.Management\LtiIntegrationGateway.Management.csproj" />
+    <ProjectReference Include="..\..\src\LtiIntegrationGateway.Flow\LtiIntegrationGateway.Flow.csproj" />
+    <ProjectReference Include="..\..\src\LtiIntegrationGateway.ServiceDefaults\LtiIntegrationGateway.ServiceDefaults.csproj" />
+  </ItemGroup>
+
+</Project>

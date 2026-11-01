@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <UserSecretsId>1d4e0fb6-7d5a-4b0e-9c1a-6f3f0b7c2a11</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="All" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Rebus" />
+    <PackageReference Include="Rebus.PostgreSql" />
+    <PackageReference Include="Rebus.ServiceProvider" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LtiIntegrationGateway.Core\LtiIntegrationGateway.Core.csproj" />
+    <ProjectReference Include="..\LtiIntegrationGateway.ServiceDefaults\LtiIntegrationGateway.ServiceDefaults.csproj" />
+  </ItemGroup>
+
+</Project>

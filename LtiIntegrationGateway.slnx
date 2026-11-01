@@ -1,11 +1,26 @@
 <Solution>
   <Folder Name="/Solution Items/">
     <File Path=".editorconfig" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
   </Folder>
   <Folder Name="/src/">
-    <Project Path="src/LtiIntegrationGateway/LtiIntegrationGateway.csproj" Id="3bdfe336-0361-4937-a613-1ec34a0d4f6d" />
+    <Project Path="src/LtiIntegrationGateway.Contracts/LtiIntegrationGateway.Contracts.csproj" />
+    <Project Path="src/LtiIntegrationGateway.Core/LtiIntegrationGateway.Core.csproj" />
+    <Project Path="src/LtiIntegrationGateway.Flow/LtiIntegrationGateway.Flow.csproj" />
+    <Project Path="src/LtiIntegrationGateway.Management/LtiIntegrationGateway.Management.csproj" />
+    <Project Path="src/LtiIntegrationGateway.ServiceDefaults/LtiIntegrationGateway.ServiceDefaults.csproj" />
+    <Project Path="src/LtiIntegrationGateway.AppHost/LtiIntegrationGateway.AppHost.csproj" />
+  </Folder>
+  <Folder Name="/src/protos/" />
+  <Folder Name="/src/protos/v1/">
+    <File Path="protos/v1/integration_messages.proto" />
+    <File Path="protos/v1/management_api.proto" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="src/LtiIntegrationGateway.Tests/LtiIntegrationGateway.Tests.csproj" />
+    <Project Path="tests/LtiIntegrationGateway.Core.Tests/LtiIntegrationGateway.Core.Tests.csproj" />
+    <Project Path="tests/LtiIntegrationGateway.Flow.Tests/LtiIntegrationGateway.Flow.Tests.csproj" />
+    <Project Path="tests/LtiIntegrationGateway.Management.Tests/LtiIntegrationGateway.Management.Tests.csproj" />
+    <Project Path="tests/LtiIntegrationGateway.TestSupport/LtiIntegrationGateway.TestSupport.csproj" />
   </Folder>
 </Solution>

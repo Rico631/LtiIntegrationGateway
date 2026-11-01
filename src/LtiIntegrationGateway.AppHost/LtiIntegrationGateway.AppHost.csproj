@@ -1,0 +1,24 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.6.4">
+
+  <!-- Локальный контур разработки: PostgreSQL, сервис управления и экземпляры потоков по интеграциям.
+       В кластер этот проект не разворачивается: прод-манифесты ведутся отдельно. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UserSecretsId>b7f1c1a4-6c3d-4d8e-9b57-2f0c9a3e51d2</UserSecretsId>
+    <!-- AppHost запускается через dotnet run; возможности, требующие Aspire CLI bundle, не используются. -->
+    <NoWarn>$(NoWarn);ASPIRE010</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.AppHost" />
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" />
+  </ItemGroup>
+
+  <!-- SDK AppHost превращает ссылки на проекты в ресурсы и генерирует типизированные
+       Projects.*: пути к csproj в Program.cs не дублируются. -->
+  <ItemGroup>
+    <ProjectReference Include="..\LtiIntegrationGateway.Management\LtiIntegrationGateway.Management.csproj" />
+    <ProjectReference Include="..\LtiIntegrationGateway.Flow\LtiIntegrationGateway.Flow.csproj" />
+  </ItemGroup>
+
+</Project>
