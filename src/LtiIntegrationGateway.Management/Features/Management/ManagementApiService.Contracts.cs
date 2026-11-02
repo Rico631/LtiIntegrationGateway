@@ -169,7 +169,7 @@ public sealed partial class ManagementApiService
             return ToContractResponse(false, request.Version, null, problems, []);
         }
 
-        var settings = new LtiIntegrationGateway.Features.Contracts.ContractVersionSettings(
+        var settings = new Contracts.ContractVersionSettings(
             request.Settings!.RecipientQueue,
             authType,
             request.Settings.ConfigKey,
@@ -237,17 +237,17 @@ public sealed partial class ManagementApiService
         RecipientQueue = operation.RecipientQueue ?? string.Empty,
     };
 
-    private static LtiIntegrationGateway.Contracts.Management.V1.ContractVersionSettings ToSettings(
-        LtiIntegrationGateway.Features.Contracts.ContractVersionSettings settings) => new()
-    {
-        RecipientQueue = settings.RecipientQueue ?? string.Empty,
-        AuthType = ChannelMapping.FormatAuthType(settings.AuthType),
-        ConfigKey = settings.ConfigKey ?? string.Empty,
-        HeaderName = settings.HeaderName ?? string.Empty,
-        UserName = settings.UserName ?? string.Empty,
-        RateLimitPermit = settings.RateLimitPermit ?? 0,
-        RateLimitWindowSeconds = settings.RateLimitWindowSeconds ?? 0,
-    };
+    private static ContractVersionSettings ToSettings(
+        Contracts.ContractVersionSettings settings) => new()
+        {
+            RecipientQueue = settings.RecipientQueue ?? string.Empty,
+            AuthType = ChannelMapping.FormatAuthType(settings.AuthType),
+            ConfigKey = settings.ConfigKey ?? string.Empty,
+            HeaderName = settings.HeaderName ?? string.Empty,
+            UserName = settings.UserName ?? string.Empty,
+            RateLimitPermit = settings.RateLimitPermit ?? 0,
+            RateLimitWindowSeconds = settings.RateLimitWindowSeconds ?? 0,
+        };
 
     private static ContractOperationResponse ToContractResponse(
         bool succeeded,
